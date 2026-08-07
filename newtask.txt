@@ -1,0 +1,28 @@
+NEXT FOCUS — analyse.pdhc (after #538 scaffold + #539 port, local-green)
+
+The service is built + tested locally (38 pytest green, single alembic head
+0001_initial, py_compile clean). NOT deployed, NOT committed. Next:
+
+1. Operator verifies the tree, then git init + commit (Claude was told not to).
+
+2. Deploy to macmini (readme.md 1.c):
+   - Release-symlink layout /usr/local/www/analyse.pdhc/ (CLAUDE.md §7).
+   - Fill analyse_app/.env: AUTH_MODE=sso, SSO client creds (register `analyse`
+     consumer in sso.pdhc + SSO_CLIENT_ID/SECRET), SECRET_KEY, the three
+     service keys (ANALYSE_PDHC_SERVICE_KEY own + GATEWAY_/MONITOR_ inbound),
+     CDR_ENDPOINTS (cdr2..cdr6 loopback), IPS_BASE_URL, POSTGRES_PASSWORD.
+   - SSO_CALLBACK_URL=https://analyse.pdhc.se/auth/callback.
+   - ./start.sh ; flask create-su ; operator adds analyse.pdhc.se vhost.
+
+3. #540 — repoint gateway.pdhc ANALYSE_BASE_URL → analyse.pdhc (HARD dep for
+   the #291 /api/v1/observations pull). SEPARATE ticket, operator/gateway repo.
+
+4. #541 — flip CDR2–6 to accept X-Source-Service: analyse.pdhc +
+   ANALYSE_PDHC_SERVICE_KEY as an analyse read identity. SEPARATE ticket.
+
+5. #543 — after analyse is live + verified, delete the group half (researcher +
+   federated endpoints) from dashboard(cd-assist).
+
+Do NOT add nurse/charts/patient-single-view here (that is cd-assist). D5 drift:
+federation.py + aggregations.py are shared copies across dashboard/cd-assist/
+analyse — mirror any fix to all three.

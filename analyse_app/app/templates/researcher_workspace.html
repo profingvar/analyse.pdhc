@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Researcher workspace · analyse.pdhc</title>
+<style>
+  :root { --border:#d9dde3; --card-bg:#fff; --primary:#2a6ebb; --muted:#667; }
+  * { box-sizing:border-box; }
+  body { font-family:system-ui,-apple-system,sans-serif; margin:0; background:#f5f6f8; color:#1a1d21; }
+  header { display:flex; align-items:center; justify-content:space-between;
+           padding:.7rem 1.2rem; background:#fff; border-bottom:1px solid var(--border); }
+  header h1 { font-size:1.05rem; margin:0; }
+  header a { color:var(--primary); text-decoration:none; font-size:.9rem; }
+  main { max-width:60rem; margin:1.2rem auto; padding:0 1rem; }
+  button { font:inherit; padding:.4rem .8rem; border:1px solid var(--primary);
+           background:var(--primary); color:#fff; border-radius:4px; cursor:pointer; }
+  .status { color:var(--muted); font-size:.85rem; }
+  .card { background:var(--card-bg); border:1px solid var(--border); border-radius:6px;
+          padding:.8rem 1rem; margin-bottom:1rem; }
+  .card h2 { font-size:1rem; margin:0 0 .5rem; }
+  textarea { width:100%; min-height:7rem; font:.85rem ui-monospace,Menlo,monospace;
+             border:1px solid var(--border); border-radius:4px; padding:.5rem; }
+  table { width:100%; border-collapse:collapse; font-size:.92rem; }
+  td, th { padding:.3rem .4rem; border-bottom:1px solid #eee; text-align:left; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>analyse.pdhc · Researcher workspace</h1>
+  <a href="/auth/logout">Log out</a>
+</header>
+<main>
+  <div class="card">
+    <h2>Define a cohort</h2>
+    <p class="status">Group / population layer — analysis phase. Enter a cohort
+      filter predicate (JSON) and resolve it across CDR2&ndash;6.</p>
+    <textarea id="filter">{
+  "cdr_ids": [],
+  "demographics": { "age_min": 40, "age_max": 70 },
+  "conditions": []
+}</textarea>
+    <p><button id="define">Define cohort</button>
+       <span id="status" class="status"></span></p>
+  </div>
+
+  <div id="pane" class="card" hidden>
+    <h2>Cohort</h2>
+    <div id="cohort-meta" class="status"></div>
+  </div>
+
+  <div class="card">
+    <h2>Recent cohorts</h2>
+    <table id="cohorts"><tbody></tbody></table>
+  </div>
+</main>
+
+<script>
+// Thin shell: every action calls the ported /api/cohort JSON endpoints,
+// which authenticate via the session cookie set by the SSO callback.
+const $ = (id) => document.getElementById(id);
+
+async function jfetch(url, opts) {
+  const r = await fetch(url, Object.assign({ credentials: "same-origin" }, opts || {}));
+  if (r.status === 401) { window.location = "/auth/login"; return null; }
+  return { status: r.status, body: await r.json().catch(() => null) };
+}
+
+async function define() {
+  let filter;
+  try { filter = JSON.parse($("filter").value); }
+  catch (e) { $("status").textContent = "invalid JSON: " + e.message; return; }
+  $("status").textContent = "resolving…";
+  const r = await jfetch("/api/cohort", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify(filter),
+  });
+  if (!r) return;
+  if (r.status !== 201) {
+    $("status").textContent = "error " + r.status + (r.body && r.body.error ? ": " + r.body.error : "");
+    return;
+  }
+  $("status").textContent = "cohort " + r.body.cohort_id.slice(0, 8) + " · n=" + r.body.n;
+  $("pane").hidden = false;
+  $("cohort-meta").textContent = "id " + r.body.cohort_id + " — " + r.body.n + " member(s)";
+  loadCohorts();
+}
+
+async function loadCohorts() {
+  const tb = $("cohorts").querySelector("tbody");
+  tb.innerHTML = "";
+  const r = await jfetch("/api/cohort");
+  if (!r || r.status !== 200 || !r.body) return;
+  for (const c of r.body.cohorts || []) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${c.cohort_id.slice(0, 8)}</td><td>${c.n}</td>`
+      + `<td class="status">${(c.created_at || "").slice(0, 19)}</td>`;
+    tb.appendChild(tr);
+  }
+  if (!tb.children.length) tb.innerHTML = "<tr><td class='status'>no cohorts yet</td></tr>";
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  $("define").addEventListener("click", define);
+  loadCohorts();
+});
+</script>
+</body>
+</html>
