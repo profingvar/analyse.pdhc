@@ -14,7 +14,7 @@ It hosts:
 
 It is gated on the **ANALYSIS phase**. The individual / point-of-care half
 (nurse, `/charts`, patient single-view, CDR1 care-delivery reads) lives in
-cd-assist.pdhc and is deliberately absent here.
+cd-assist (host `dashboard.pdhc.se`, unchanged) and is deliberately absent here.
 
 ## Architecture
 
