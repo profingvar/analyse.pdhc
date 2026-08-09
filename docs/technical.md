@@ -103,3 +103,13 @@ hermetic test suite). Single alembic head `0001_initial`.
 Server layout CLAUDE.md §7. Hard follow-ups: **#540** gateway
 `ANALYSE_BASE_URL` repoint, **#541** CDR2–6 read-identity flip, **#543** delete
 the group half from dashboard(cd-assist). See readme.md.
+
+## Port Allocation
+
+All ports bind to `127.0.0.1` (loopback only); external traffic arrives
+via the reverse proxy.
+
+| Port | Service |
+|------|---------|
+| 9110 | Flask application (Gunicorn) |
+| 9111 | PostgreSQL database |
