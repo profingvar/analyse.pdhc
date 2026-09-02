@@ -65,3 +65,13 @@
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_sso_web.py
 2026-08-07T18:03:33Z docs/cutover_runbook.md — cross-service deploy+cutover runbook (#540/#541/#542/#543/#547/#544)
 - analyse.pdhc/docs/technical.md (Port Allocation section)
+
+## 2026-09-02T15:05:46Z — #578 Stage 1: org-scoped clinical patient list (choose patient)
+- analyse_app/app/services/patient_directory.py (new) — ips clinic-patients + demographics
+- analyse_app/app/analyse/patient_list.py (new) — org-scoped, CDR-enriched, spärr-aware list
+- analyse_app/app/routes/clinical.py (new) — GET /api/cdrs, GET /api/patients
+- analyse_app/app/services/role_guards.py — clinical_required (care roles + admin)
+- analyse_app/app/routes/views.py — landing→choose_patient; /researcher for the workspace
+- analyse_app/app/__init__.py — register clinical_bp
+- analyse_app/app/templates/choose_patient.html (new) — nav + CDR selector + patient table
+- analyse_app/tests/{test_patient_list,test_clinical_api}.py (new); test_sso_web.py updated

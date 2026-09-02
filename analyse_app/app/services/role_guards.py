@@ -78,3 +78,23 @@ def admin_required(fn):
             return fn(*args, **kwargs)
         abort(403, description="admin role required")
     return wrapper
+
+
+# Care-zone roles that may view the clinical patient list (#578). Admin
+# satisfies any check. Researcher-only accounts are denied (they use the
+# cohort workspace, not the per-patient clinical view).
+_CARE_ROLES = {"doctor", "nurse", "other_care"}
+
+
+def clinical_required(fn):
+    """Allow any care-zone professional (doctor/nurse/other_care) or admin.
+
+    The org-scoped patient list (#578) is a care-delivery view, so it is
+    gated on a care role rather than the researcher role.
+    """
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if _is_admin() or (_roles() & _CARE_ROLES):
+            return fn(*args, **kwargs)
+        abort(403, description="clinical (care) role required")
+    return wrapper

@@ -19,4 +19,12 @@ bp = Blueprint("views", __name__)
 @bp.get("/")
 @audit_read
 def landing():
+    # #578: the org-scoped patient list ("choose patient") is now the
+    # landing view; the cohort/research workspace lives behind /researcher.
+    return render_template("choose_patient.html")
+
+
+@bp.get("/researcher")
+@audit_read
+def researcher_workspace():
     return render_template("researcher_workspace.html")
