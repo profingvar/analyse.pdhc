@@ -1,9 +1,16 @@
-analyse.pdhc — BUILT + VERIFIED + COMMITTED (0f47896). 38 tests pass, single
-alembic head 0001_initial, analysis-phase gate + gateway/monitor service-key.
+analyse.pdhc REFORM (#578 + #579) DEPLOYED 2026-09-03 — live as 0.2.0-reform.
 
-NEXT = deploy + cutover (operator-coordinated, HIGH BLAST). See
-docs/cutover_runbook.md. Blocked on operator inputs: SSO client registration
-for analyse.pdhc, 3 service keys, CDR2-6 URLs, reverse-proxy vhost
-analyse.pdhc.se + DNS/TLS. Then: deploy → #540 gateway repoint → #541 CDR
-identity flip → #542 verify → #543 delete group half from cd-assist → #547
-rebrand + www cards → #544 cleanup.
+DONE: choose-patient landing (#578), per-patient dashboard + per-clinic spärr
+enforcement + admin spärr-log (#579 items 1,2,4), live-shape verification + 4
+fixes + fail-open fix via /blocks/check (#579 item 3), deploy (#579 item 5).
+All committed/pushed (HEAD b8c21bf); 62 tests pass.
+
+NEXT = OPERATOR LIVE-SMOKE at https://analyse.pdhc.se (SSO-gated, I can't click):
+  1. Landing "choose patient": your org's patients w/ names + datapoints.
+  2. Click a patient -> dashboard: series + sparklines from CDR2-6.
+  3. If a blocked patient exists: data hidden + spärr badge/banner; admin sees
+     it (break-glass) + /admin/sparr-log logs the exposure.
+  4. Confirm names come through (ips /clinics/<g>/patients round-trip) and the
+     spärr /blocks/check token round-trip works with a real professional token.
+Then close #579. Rollback if needed: ln -snf releases/2026-08-08T08-30-34Z current
++ docker-compose up -d --build (old scaffold), backups in ~/backups/predeploy/.

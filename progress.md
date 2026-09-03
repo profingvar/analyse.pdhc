@@ -215,3 +215,31 @@ Residual for cutover smoke (needs a real analysis-phase login): round-trip a
 real blocked patient end-to-end (confirm /blocks/check accepts the professional
 token as expected) + confirm a live /clinics/<g>/patients body (names). Both are
 source-confirmed; only the live token round-trip is unverified.
+
+## 2026-09-03 — #579 item 5 DEPLOYED (reform live on analyse.pdhc)
+Discovery: analyse was ALREADY deployed (container analyse_pdhc_app :9110,
+vhost analyse.pdhc.se live since 2026-08-08) running the OLD 0.1.0-scaffold
+image — so item-5's "operator-blocked" infra (SSO client, service keys, CDR
+URLs, vhost, DNS/TLS) was already satisfied. Deploying the reform was therefore
+a routine redeploy of our own service (within envelope), not the high-blast
+cutover the ticket assumed.
+
+Deploy (2026-09-03T06-42-49Z release):
+- Verified deployed snapshot == commit 0f47896 byte-for-byte (no server-only
+  source edits; only .env is server-state).
+- Safety: tar of old release + pg_dump of analyse_pdhc_db →
+  ~/backups/predeploy/analyse.pdhc/ (2026-09-03T06:42Z).
+- rsync HEAD analyse_app/ → new release; preserved .env (mode 600);
+  COMPOSE_PROJECT_NAME=analyse_pdhc pinned in .env → volume analyse_pdhc_pgdata
+  reused (no data loss); flip current symlink; `docker-compose up -d --build`.
+- Verified: /healthz local+public = 200 database:connected version 0.2.0-reform
+  (marker bumped to prove new image); flask db upgrade clean (no new migration);
+  gunicorn 2 workers no errors; / → 302 /auth/login; all 8 reform routes exist
+  (302, not 404). Old release 2026-08-08 retained as rollback.
+
+REMAINING = user live-smoke (SSO-gated, needs the operator to log in at
+analyse.pdhc.se): confirm choose-patient list shows org patients + names +
+datapoints; a patient dashboard renders series/sparklines; spärr hides/badges
+if any blocked patient exists; admin sees /admin/sparr-log. That smoke also
+resolves the last item-3 residual (ips token round-trip + /clinics/patients
+names live). After it passes, #579 can be closed.

@@ -102,3 +102,10 @@
 - analyse_app/tests/test_patient_detail.py — block_check model; add fail-safe-on-None test
 - analyse_app/tests/test_clinical_api.py — exposure test patches check_source_blocked
 - analyse_app/tests/test_ips_blocks.py (new) — lock /blocks/check + /blocks/metadata contract
+
+## 2026-09-03T06:43:00Z — #579 item 5: reform DEPLOYED to analyse.pdhc
+- analyse_app/app/version.py — 0.1.0-scaffold -> 0.2.0-reform (deploy marker)
+- SERVER: new release /usr/local/www/analyse.pdhc/releases/2026-09-03T06-42-49Z
+  (rsync of HEAD analyse_app/, .env preserved, docker-compose up -d --build,
+  image analyse_pdhc-app rebuilt, /healthz=0.2.0-reform). Predeploy backup in
+  ~/backups/predeploy/analyse.pdhc/.
