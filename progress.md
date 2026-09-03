@@ -182,3 +182,16 @@ capture a live `/clinics/<g>/patients` body with a user token to reconfirm B
 end-to-end (source-confirmed, not yet round-tripped live).
 
 Item 5 (deploy/cutover) remains the only open #579 item — operator-blocked.
+
+### #579 item-3 — one OPEN spärr question (must verify at cutover)
+The per-clinic filter needs un-redacted `source_scope_id` from ips `/blocks`.
+Per memory infra_ips_auth_header_scheme, ips REDACTS `source_scope_id → None`
+for callers it deems unrelated to the patient (and 403s service accounts). If
+analyse's analysis-phase professional token is treated as "unrelated", the
+block list comes back with `source_scope_id=None` → blocked_clinic_ids is empty
+→ the filter silently FAILS OPEN (spärrad data shown). Resolve at cutover by
+either: (i) confirming the professional token is "related" enough for the
+un-redacted list; (ii) registering an analyse service ApiKey in ips and
+fetching the list server-to-server; or (iii) switching the checker to per-org
+`GET /blocks/check?source_clinic_id=<org>` (relationship-free, un-redacted).
+Code currently does (path i) — safe only if the assumption holds.
