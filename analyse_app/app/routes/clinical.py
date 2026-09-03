@@ -6,7 +6,7 @@ Endpoints (care role or admin — see clinical_required):
   GET /api/patient/<guid>?cdr_ids= → one patient's spärr-enforced detail (#579)
   GET /api/admin/sparr-log         → admin spärr-exposure audit log (#579)
 """
-from flask import Blueprint, current_app, g, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request, session
 
 from app.analyse.federation import CdrRegistry
 from app.analyse.patient_list import build_patient_list
@@ -35,6 +35,19 @@ def _blob() -> dict:
 
 
 def _bearer() -> str | None:
+    """The caller's SSO token, to forward to ips.pdhc.
+
+    Browser calls authenticate via the Flask session cookie (the token is
+    ``session["sso_token"]``, set by the SSO callback) — NOT an Authorization
+    header. ips.pdhc rejects analyse's service key (verified #579/item-3), so
+    ips calls MUST carry the user token. Header Bearer is kept as a fallback
+    for service/test callers that do send one."""
+    try:
+        tok = session.get("sso_token")
+    except RuntimeError:  # no request/session context
+        tok = None
+    if tok:
+        return tok
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
         return auth[len("Bearer "):].strip() or None
@@ -115,22 +128,16 @@ def patient_detail(guid):
     cdr_ids = [c.strip() for c in raw.split(",") if c.strip()] or None
     bearer = _bearer()
 
-    blocks, fail_closed = _active_blocks(bearer, guid)
-    is_admin = bool(blob.get("is_su_admin"))
-    if fail_closed and not is_admin and not blocks:
-        # ips unreachable → cannot confirm the patient is un-blocked; treat as
-        # blocked for a non-admin caller (fail closed). A sentinel keeps
-        # build_patient_detail's block-present branch without a real Block.
-        blocks = [object()]
-
+    blocks, ips_unavailable = _active_blocks(bearer, guid)
     result = build_patient_detail(
-        blob, guid, cdr_ids, _registry(), bearer=bearer, blocks=blocks,
+        blob, guid, cdr_ids, _registry(),
+        bearer=bearer, blocks=blocks, ips_unavailable=ips_unavailable,
     )
 
     if result["exposure"]:
         g._audit_event_type = "sparr_lift_exposure"
         g._audit_payload_snapshot = {"break_glass": True,
-                                     "blocked_patient": True,
+                                     "exposed_orgs": result.get("exposed_orgs"),
                                      "block_guids": _block_ids(blocks)}
     elif result["blocked"]:
         g._audit_event_type = "sparr_hidden"

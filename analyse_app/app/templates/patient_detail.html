@@ -138,13 +138,22 @@ function sparkline(points) {
 
 function setBanner(j) {
   const el = $("#banner");
-  if (j.blocked) {
+  if (j.fanout_mode === "unavailable") {
     el.className = "banner block";
-    el.textContent = "Spärrade uppgifter — den här patienten har en aktiv spärr. Kliniska data är dolda för din behörighet.";
+    el.textContent = "Spärrtjänsten (ips) kunde inte nås — kliniska data visas inte tills spärrstatus kan bekräftas.";
     el.hidden = false;
   } else if (j.exposure) {
     el.className = "banner exposure";
-    el.textContent = "Nödöppning (admin): patienten har en aktiv spärr men data visas i kraft av din admin-behörighet. Åtkomsten loggas.";
+    el.textContent = "Nödöppning (admin): patienten har en aktiv spärr, men spärrade uppgifter visas i kraft av din admin-behörighet. Varje exponering loggas.";
+    el.hidden = false;
+  } else if (j.blocked) {
+    el.className = "banner block";
+    const n = j.filtered_count || 0;
+    el.textContent = `Spärrade uppgifter — ${n} datapunkt${n === 1 ? "" : "er"} från en eller flera spärrade vårdgivare är dolda för din behörighet.`;
+    el.hidden = false;
+  } else if (j.block_present) {
+    el.className = "banner exposure";
+    el.textContent = "Patienten har en aktiv spärr. Inga uppgifter i ditt urval berörs, men spärr finns registrerad.";
     el.hidden = false;
   } else {
     el.hidden = true;

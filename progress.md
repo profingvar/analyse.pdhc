@@ -146,3 +146,39 @@ Note (SQLite test artifact): the `analyse_audit.patient_guid` UUID column takes
 NUMERIC affinity under SQLite, so an all-digit guid is coerced to a float on
 write. Prod Postgres has a real `uuid` column and is unaffected; tests use
 uuid4-shaped guids (hex letters) to keep TEXT affinity.
+
+## 2026-09-03 — #579 item-3 DONE (live-shape verification against cdr2–5 + ips)
+Verified against the running platform (analyse deployed but on the old
+0.1.0-scaffold image; reform code still local). Probed cdr2 (9146) as
+analyse.pdhc service key, and read ips.pdhc source for exact response shapes.
+
+VERIFIED SHAPES:
+- CDR Observation: `code.coding[0]` = LOINC/termbank standard code,
+  `coding[1]` = plan.pdhc Concept guid (system `.../Concept`, always present).
+  Owning clinic = `meta.security[code=="org_guid"].display`. Value in
+  `valueQuantity.value`+`unit`(+`code`). `subject.reference` = `Patient/<guid>`.
+  `?patient=<guid>` filter works.
+- ips `/api/v1/clinics/<g>/patients` = FLAT ARRAY of PatientIndex.to_dict():
+  `{guid, family_name, given_name, birth_date, is_active, ...}` (NOT `name`).
+- ips auth: REJECTS analyse's service key (401). ips calls must carry the
+  user's SSO token — which lives in `session["sso_token"]`, not a header.
+
+FOUR BUGS the verification surfaced, all fixed:
+  A. clinical._bearer() read the Authorization header → None for browser
+     (cookie-auth) calls → every ips call 401 → non-admin list would show ALL
+     patients spärrade + per-patient always failed. Now reads session token.
+  B. patient_directory._name_of only handled `name`/FHIR HumanName → clinic
+     patient names were blank. Added the flat family_name/given_name branch.
+  C. patient_detail grouped series on coding[0] (LOINC, absent for unmapped
+     concepts). Now keys on the plan.pdhc Concept guid, labels by LOINC.
+  D. Coarse patient-level hide replaced by PER-CLINIC spärr: drop observations
+     whose meta.security org_guid ∈ blocked clinics (non-admin); admin
+     break-glass exposes them and logs `sparr_lift_exposure` with exposed_orgs.
+     Block fetch fails OPEN with banner (platform legal model); a hard ips
+     outage (ips_unavailable) fails closed for a non-admin.
+
+59 tests pass. Residual (needs a real user login, deferred to cutover smoke):
+capture a live `/clinics/<g>/patients` body with a user token to reconfirm B
+end-to-end (source-confirmed, not yet round-tripped live).
+
+Item 5 (deploy/cutover) remains the only open #579 item — operator-blocked.

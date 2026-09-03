@@ -56,12 +56,20 @@ def test_clinical_required_allows_nurse(app, monkeypatch):
 
 # --- #579: per-patient detail + admin spärr-log ----------------------------
 
-def _obsc(patient, code, date):
-    return {"resourceType": "Observation",
-            "subject": {"reference": f"Patient/{patient}"},
-            "code": {"coding": [{"code": code, "display": code}]},
-            "valueQuantity": {"value": 5.0, "unit": "mmol/L"},
-            "effectiveDateTime": date}
+def _obsc(patient, code, date, org=None):
+    o = {"resourceType": "Observation",
+         "subject": {"reference": f"Patient/{patient}"},
+         "code": {"coding": [
+             {"code": "L-" + code, "display": code,
+              "system": "https://termbank.pdhc.se/CodeSystem/loinc"},
+             {"code": code, "display": code,
+              "system": "https://plan.pdhc.se/Concept"}]},
+         "valueQuantity": {"value": 5.0, "unit": "mmol/L"},
+         "effectiveDateTime": date}
+    if org is not None:
+        o["meta"] = {"security": [{"code": "org_guid", "display": org,
+                                   "system": "https://cdr.pdhc.se/CodeSystem/org"}]}
+    return o
 
 
 # Patient guids are UUIDs platform-wide (Rule 18); the audit column is UUID.
@@ -92,10 +100,12 @@ def test_patient_detail_route_admin_shape(app, monkeypatch):
 def test_patient_detail_admin_exposure_is_logged_and_visible(app, monkeypatch):
     import app.analyse.patient_detail as pd
     monkeypatch.setattr(pd, "fanout",
-                        lambda *a, **k: _resp([_res("cdr1", [_obsc(_PAT_Y, "c1", "2026-01-01")])]))
+                        lambda *a, **k: _resp([_res("cdr1", [_obsc(_PAT_Y, "c1", "2026-01-01", org="clinicX")])]))
     monkeypatch.setattr("app.services.patient_directory.get_patient",
                         lambda g, bearer=None: {"name": "Y"})
-    block = type("B", (), {"guid": "blk-1", "is_active": True})()
+    block = type("B", (), {"guid": "blk-1", "is_active": True,
+                           "source_scope_type": "clinic",
+                           "source_scope_id": "clinicX"})()
     monkeypatch.setattr("app.services.ips_client.IpsClient.fetch_active_blocks",
                         lambda self, g: [block])
     c = app.test_client()

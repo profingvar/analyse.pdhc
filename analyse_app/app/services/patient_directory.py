@@ -42,14 +42,26 @@ def _birth_year(bd) -> str | None:
 
 
 def _name_of(res: dict) -> str | None:
-    """Accept either a flat name or a FHIR HumanName list."""
+    """Accept a flat name, split family/given, or a FHIR HumanName list.
+
+    ips ``/clinics/<g>/patients`` returns PatientIndex.to_dict() — a flat
+    ``{family_name, given_name, ...}`` (verified #579/item-3), NOT ``name``.
+    The FHIR ``/Patient/<g>`` endpoint returns ``name:[{family, given[]}]``.
+    """
     name = res.get("name") or res.get("display_name") or res.get("full_name")
     if isinstance(name, list) and name:
         n0 = name[0] or {}
         given = " ".join(n0.get("given", []) or [])
         family = n0.get("family", "") or ""
         name = (f"{given} {family}").strip() or n0.get("text")
-    return name or None
+    if name:
+        return name
+    # Flat PatientIndex shape from ips clinics/<g>/patients.
+    fam = res.get("family_name")
+    giv = res.get("given_name")
+    if fam or giv:
+        return (f"{giv or ''} {fam or ''}").strip() or None
+    return None
 
 
 def list_clinic_patients(care_unit_guid: str, bearer: str | None = None) -> list[dict]:

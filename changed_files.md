@@ -84,3 +84,12 @@
 - analyse_app/app/templates/sparr_log.html (new) — admin oversight over sparr_lift_exposure/sparr_hidden
 - analyse_app/app/templates/choose_patient.html — Spärrlogg nav link
 - analyse_app/tests/test_patient_detail.py (new); test_clinical_api.py extended (patient + admin-log + exposure-logged)
+
+## 2026-09-03T07:00:00Z — #579 item-3: live-shape verification + fixes
+- analyse_app/app/routes/clinical.py — _bearer() now reads session["sso_token"] (ips rejects service key)
+- analyse_app/app/services/patient_directory.py — _name_of handles flat family_name/given_name (ips clinics/patients)
+- analyse_app/app/analyse/patient_detail.py — series keyed by plan.pdhc Concept guid (coding[1]); per-clinic spärr via meta.security org_guid (replaces coarse hide); admin break-glass exposes+logs exposed_orgs
+- analyse_app/app/templates/patient_detail.html — banner reflects partial hide / exposure / block-present / ips-unavailable
+- analyse_app/tests/test_patient_detail.py — rewritten for per-clinic model + concept-guid grouping
+- analyse_app/tests/test_clinical_api.py — _obsc carries concept coding + org; exposure test uses a clinic block
+- analyse_app/tests/test_patient_directory.py (new) — locks verified ips flat + FHIR name shapes
