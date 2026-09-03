@@ -138,11 +138,7 @@ function sparkline(points) {
 
 function setBanner(j) {
   const el = $("#banner");
-  if (j.fanout_mode === "unavailable") {
-    el.className = "banner block";
-    el.textContent = "Spärrtjänsten (ips) kunde inte nås — kliniska data visas inte tills spärrstatus kan bekräftas.";
-    el.hidden = false;
-  } else if (j.exposure) {
+  if (j.exposure) {
     el.className = "banner exposure";
     el.textContent = "Nödöppning (admin): patienten har en aktiv spärr, men spärrade uppgifter visas i kraft av din admin-behörighet. Varje exponering loggas.";
     el.hidden = false;

@@ -93,3 +93,12 @@
 - analyse_app/tests/test_patient_detail.py — rewritten for per-clinic model + concept-guid grouping
 - analyse_app/tests/test_clinical_api.py — _obsc carries concept coding + org; exposure test uses a clinic block
 - analyse_app/tests/test_patient_directory.py (new) — locks verified ips flat + FHIR name shapes
+
+## 2026-09-03T08:00:00Z — #579 item-3 (2): spärr via /blocks/check (fail-open fix)
+- analyse_app/app/services/ips_client.py — check_source_blocked + patient_has_block (relationship-free)
+- analyse_app/app/analyse/patient_detail.py — block_check(org) callable; per-producing-org filter; drop /blocks-list use
+- analyse_app/app/routes/clinical.py — _source_block_check memoised; list badge via patient_has_block (metadata)
+- analyse_app/app/templates/patient_detail.html — drop dead "unavailable" banner branch
+- analyse_app/tests/test_patient_detail.py — block_check model; add fail-safe-on-None test
+- analyse_app/tests/test_clinical_api.py — exposure test patches check_source_blocked
+- analyse_app/tests/test_ips_blocks.py (new) — lock /blocks/check + /blocks/metadata contract

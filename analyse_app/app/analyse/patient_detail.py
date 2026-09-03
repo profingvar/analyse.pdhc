@@ -14,15 +14,20 @@ Live shapes verified #579/item-3 against cdr2–5 + ips.pdhc:
   - The owning clinic is in ``meta.security`` where ``code == "org_guid"`` →
     ``display`` (same shape ``researcher._extract_org`` reads).
 
-Spärr contract (v1, per-clinic — uses the verified org_guid):
-  - A clinic-scope block hides that clinic's observations. Non-admin: those
-    rows are dropped; the caller still sees un-blocked clinics' data.
+Spärr contract (v1, per producing-clinic — uses the verified org_guid):
+  - For each distinct producing ``org_guid`` in the patient's observations, ask
+    ips ``/blocks/check?source_clinic_id=<org>`` (relationship-free,
+    un-redacted — the ``/blocks`` list would 403/redact and fail OPEN).
+  - Non-admin: observations from a blocked producing clinic are dropped; the
+    caller still sees un-blocked clinics' data.
   - Admin: break-glass — blocked-clinic rows are shown and the route logs a
     ``sparr_lift_exposure`` audit row naming the exposed org(s).
-  - Block fetch fails OPEN with a banner (platform legal model, ips_client
-    docstring): org-scoping already constrains a non-admin's data.
+  - If ips cannot answer for an org (``block_check`` returns None) while the
+    patient has some block, a non-admin's rows for that org are dropped
+    (fail SAFE); admin still sees them but no exposure is logged (unconfirmed).
 
-One fanout per selected CDR (patient-filtered), grouped locally — O(#CDRs).
+One fanout per selected CDR (patient-filtered), grouped locally — O(#CDRs);
+one ips /blocks/check per distinct producing-org (memoised).
 """
 from __future__ import annotations
 
@@ -32,7 +37,6 @@ from app.analyse.federation import fanout
 from app.analyse.patient_list import _obs_date, _patient_of
 from app.auth import scope_org_guids
 from app.services import patient_directory as pdir
-from app.services.ips_client import blocked_clinic_ids, has_any_active_block
 
 logger = logging.getLogger(__name__)
 
@@ -100,22 +104,8 @@ def _unit_of(res: dict) -> str | None:
     return None
 
 
-def _group_series(results, patient_guid, blocked_clinics, is_admin):
-    """Group every CDR's patient-filtered observations into per-concept series,
-    applying the per-clinic spärr filter.
-
-    Returns ``(series, total_kept, filtered_count, exposed_orgs)``:
-      - non-admin: observations from a blocked clinic are dropped
-        (``filtered_count``); an observation with no resolvable org while a
-        clinic block is active is also dropped (fail-safe — cannot prove it is
-        not from the blocked clinic).
-      - admin: all observations are kept; blocked-clinic orgs are collected in
-        ``exposed_orgs`` for the break-glass audit row.
-    """
-    groups: dict[str, dict] = {}
-    total = 0
-    filtered = 0
-    exposed: set[str] = set()
+def _iter_patient_resources(results, patient_guid):
+    """Yield ``(cid, resource, org_guid)`` for this patient across all CDRs."""
     for r in results:
         if not getattr(r, "ok", False) or not isinstance(r.body, dict):
             continue
@@ -125,68 +115,25 @@ def _group_series(results, patient_guid, blocked_clinics, is_admin):
             pg = _patient_of(res)
             if patient_guid and pg and pg != patient_guid:
                 continue
-            org = _org_of(res)
-            if blocked_clinics and (org in blocked_clinics or org is None):
-                if not is_admin:
-                    filtered += 1
-                    continue                      # hide from a care caller
-                if org is not None:
-                    exposed.add(org)              # admin break-glass exposure
-            code, label = _concept_and_label(res)
-            grp = groups.get(code)
-            if grp is None:
-                grp = groups[code] = {"code": code, "label": label,
-                                      "unit": _unit_of(res), "points": []}
-            if not grp["unit"]:
-                grp["unit"] = _unit_of(res)
-            grp["points"].append({"at": _obs_date(res), "value": _value_of(res),
-                                  "cdr_id": cid})
-            total += 1
-
-    series = []
-    for grp in groups.values():
-        grp["points"].sort(key=lambda p: p["at"] or "")
-        grp["count"] = len(grp["points"])
-        grp["latest"] = grp["points"][-1]["at"] if grp["points"] else None
-        series.append(grp)
-    series.sort(key=lambda s: (-s["count"], s["label"] or ""))
-    return series, total, filtered, exposed
+            yield cid, res, _org_of(res)
 
 
 def build_patient_detail(blob, patient_guid, cdr_ids, registry, *,
-                         bearer=None, blocks=None, ips_unavailable=False):
+                         bearer=None, block_check=None):
     """Assemble one patient's spärr-aware clinical detail across the CDRs.
 
-    ``blocks`` is the patient's active spärr blocks (list of ips_client.Block).
-    ``ips_unavailable`` is set by the route when the block fetch could not be
-    made at all — a non-admin caller is then shown nothing (fail closed), which
-    is stricter than the fail-open block path and reserved for a hard ips
-    outage.
+    ``block_check(org_guid) -> True | False | None`` answers "is data authored
+    by this clinic blocked for the patient?" (backed by ips
+    ``/blocks/check``). ``None`` means ips could not answer. When omitted, no
+    spärr filtering is applied (used only by callers that have none, e.g.
+    tests of the plain grouping).
     """
     is_admin = bool(blob.get("is_su_admin"))
     org_guids = scope_org_guids(blob)
     org_header = ",".join(str(g) for g in (org_guids or []))
 
-    blocks = list(blocks or [])
-    blocked_clinics = blocked_clinic_ids(blocks)   # clinic-scope active blocks
-    block_present = has_any_active_block(blocks)
-
     demo = pdir.get_patient(patient_guid, bearer=bearer) or {}
     selected = list(cdr_ids) if cdr_ids else [e.cdr_id for e in registry.all]
-    base = {
-        "patient_guid": patient_guid,
-        "name": demo.get("name"),
-        "birth_year": demo.get("birth_year"),
-        "is_admin": is_admin,
-        "block_present": block_present,
-        "cdr_ids": selected,
-    }
-
-    if ips_unavailable and not is_admin:
-        # Hard ips outage → cannot evaluate spärr → show nothing to a care user.
-        return {**base, "series": [], "total_points": 0, "filtered_count": 0,
-                "blocked": True, "exposure": False, "exposed_orgs": [],
-                "fanout_mode": "unavailable", "block_present": True}
 
     resp = fanout(
         registry,
@@ -197,11 +144,57 @@ def build_patient_detail(blob, patient_guid, cdr_ids, registry, *,
         org_guids_header=org_header,
         is_admin_header=is_admin,
     )
-    series, total, filtered, exposed = _group_series(
-        resp.results, patient_guid, blocked_clinics, is_admin)
+    rows = list(_iter_patient_resources(resp.results, patient_guid))
+
+    # One /blocks/check per distinct producing-org (memoised in the callable).
+    status: dict = {}
+    if block_check is not None:
+        for org in {org for _, _, org in rows if org}:
+            status[org] = block_check(org)
+    any_block = any(v is True for v in status.values())
+
+    groups: dict[str, dict] = {}
+    total = 0
+    filtered = 0
+    exposed: set[str] = set()
+    for cid, res, org in rows:
+        st = status.get(org) if org else None
+        # Blocked if confirmed blocked, or unresolvable while a block exists
+        # (unknown org, or ips could not answer for a real org) → fail SAFE.
+        blocked = (st is True) or (st is None and (org is None) and any_block) \
+            or (st is None and org is not None and org in status)
+        if blocked:
+            if not is_admin:
+                filtered += 1
+                continue                          # hide from a care caller
+            if st is True and org is not None:
+                exposed.add(org)                  # admin break-glass exposure
+        code, label = _concept_and_label(res)
+        grp = groups.get(code)
+        if grp is None:
+            grp = groups[code] = {"code": code, "label": label,
+                                  "unit": _unit_of(res), "points": []}
+        if not grp["unit"]:
+            grp["unit"] = _unit_of(res)
+        grp["points"].append({"at": _obs_date(res), "value": _value_of(res),
+                              "cdr_id": cid})
+        total += 1
+
+    series = []
+    for grp in groups.values():
+        grp["points"].sort(key=lambda p: p["at"] or "")
+        grp["count"] = len(grp["points"])
+        grp["latest"] = grp["points"][-1]["at"] if grp["points"] else None
+        series.append(grp)
+    series.sort(key=lambda s: (-s["count"], s["label"] or ""))
 
     return {
-        **base,
+        "patient_guid": patient_guid,
+        "name": demo.get("name"),
+        "birth_year": demo.get("birth_year"),
+        "is_admin": is_admin,
+        "block_present": any_block,
+        "cdr_ids": selected,
         "series": series,
         "total_points": total,
         "filtered_count": filtered,

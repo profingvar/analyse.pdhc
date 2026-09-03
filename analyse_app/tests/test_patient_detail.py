@@ -35,10 +35,10 @@ def _obs(patient, code, val, date, unit="mmol/L", label=None, org=None):
     return o
 
 
-def _block(clinic_guid):
-    return type("B", (), {"is_active": True, "source_scope_type": "clinic",
-                          "source_scope_id": clinic_guid,
-                          "guid": "blk-" + clinic_guid})()
+def _blocks(*clinic_guids):
+    """A block_check callable: the named producing clinics are blocked."""
+    blocked = set(clinic_guids)
+    return lambda org: org in blocked
 
 
 class FakeReg:
@@ -103,7 +103,7 @@ def test_non_admin_blocked_clinic_is_filtered(monkeypatch):
     out = pd.build_patient_detail(
         {"is_su_admin": False,
          "affiliations": [{"care_unit_guid": "cu-1", "role": "nurse"}]},
-        "pat-A", ["cdr1"], FakeReg(), blocks=[_block("clinicB")])
+        "pat-A", ["cdr1"], FakeReg(), block_check=_blocks("clinicB"))
     assert out["block_present"] is True
     assert out["filtered_count"] == 1
     assert out["blocked"] is True
@@ -121,45 +121,40 @@ def test_admin_blocked_clinic_exposed_and_flagged(monkeypatch):
     monkeypatch.setattr("app.services.patient_directory.get_patient",
                         lambda g, bearer=None: {"name": "Anna"})
     out = pd.build_patient_detail({"is_su_admin": True}, "pat-A", ["cdr1"],
-                                  FakeReg(), blocks=[_block("clinicB")])
+                                  FakeReg(), block_check=_blocks("clinicB"))
     assert out["blocked"] is False
     assert out["exposure"] is True          # break-glass → route logs it
     assert out["exposed_orgs"] == ["clinicB"]
     assert out["total_points"] == 2         # admin sees both clinics
 
 
-def test_caregiver_only_block_shows_data_with_banner(monkeypatch):
+def test_unblocked_clinic_shows_all(monkeypatch):
     monkeypatch.setattr(pd, "fanout",
                         lambda *a, **k: _resp([_res("cdr1", [_obs("pat-A", "c1", 5.0, "2026-08-01", org="clinicA")])]))
     monkeypatch.setattr("app.services.patient_directory.get_patient",
                         lambda g, bearer=None: {"name": "Anna"})
-    caregiver_block = type("B", (), {"is_active": True,
-                                     "source_scope_type": "caregiver",
-                                     "source_scope_id": "cg-1", "guid": "b1"})()
     out = pd.build_patient_detail(
         {"is_su_admin": False,
          "affiliations": [{"care_unit_guid": "cu-1", "role": "nurse"}]},
-        "pat-A", ["cdr1"], FakeReg(), blocks=[caregiver_block])
-    # Caregiver-scope blocks are v1-out-of-scope for filtering: data is shown,
-    # but the metadata banner still fires (block_present).
-    assert out["block_present"] is True
+        "pat-A", ["cdr1"], FakeReg(), block_check=_blocks())   # nothing blocked
+    assert out["block_present"] is False
     assert out["blocked"] is False
     assert out["total_points"] == 1
 
 
-def test_ips_unavailable_hides_for_non_admin(monkeypatch):
-    called = {"fanout": False}
-
-    def _f(*a, **k):
-        called["fanout"] = True
-        return _resp([])
-    monkeypatch.setattr(pd, "fanout", _f)
+def test_ips_unknown_verdict_fails_safe_for_non_admin(monkeypatch):
+    # block_check returns None → ips could not answer → a care caller must not
+    # see that clinic's data (fail SAFE); admin still sees it, un-logged.
+    monkeypatch.setattr(pd, "fanout",
+                        lambda *a, **k: _resp([_res("cdr1", [_obs("pat-A", "c1", 5.0, "2026-08-01", org="clinicA")])]))
     monkeypatch.setattr("app.services.patient_directory.get_patient",
                         lambda g, bearer=None: {"name": "Anna"})
-    out = pd.build_patient_detail(
+    unknown = lambda org: None
+    care = pd.build_patient_detail(
         {"is_su_admin": False,
          "affiliations": [{"care_unit_guid": "cu-1", "role": "nurse"}]},
-        "pat-A", ["cdr1"], FakeReg(), blocks=[], ips_unavailable=True)
-    assert out["blocked"] is True
-    assert out["fanout_mode"] == "unavailable"
-    assert called["fanout"] is False        # hard outage short-circuits the read
+        "pat-A", ["cdr1"], FakeReg(), block_check=unknown)
+    assert care["blocked"] is True and care["total_points"] == 0
+    admin = pd.build_patient_detail({"is_su_admin": True}, "pat-A", ["cdr1"],
+                                    FakeReg(), block_check=unknown)
+    assert admin["total_points"] == 1 and admin["exposure"] is False

@@ -138,6 +138,55 @@ class IpsClient:
         raw = payload.get("blocks") or payload.get("entry") or []
         return [Block.from_dict(b) for b in raw if isinstance(b, dict)]
 
+    def check_source_blocked(self, patient_guid: str, source_clinic_id: str):
+        """Is data authored by ``source_clinic_id`` blocked for this patient?
+
+        ``GET /api/v1/patients/<p>/blocks/check?source_clinic_id=<org>`` — the
+        relationship-free, un-redacted spärr predicate (verified #579/item-3).
+        Unlike the ``/blocks`` list it needs NO clinic relationship and never
+        redacts, so it is the correct tool for analyse's cross-clinic filter
+        (the list 403s / redacts source_scope_id for unrelated callers → would
+        fail OPEN). ``source_clinic_id`` is the observation's ``org_guid``.
+
+        Returns True / False, or ``None`` when ips could not answer (network
+        error / non-200) so the caller can fail safe."""
+        if not self.base_url or not patient_guid or not source_clinic_id:
+            return None
+        url = f"{self.base_url}/api/v1/patients/{patient_guid}/blocks/check"
+        try:
+            r = requests.get(url, params={"source_clinic_id": source_clinic_id},
+                             headers=self._headers(), timeout=self.timeout)
+        except requests.RequestException:
+            return None
+        if r.status_code != 200:
+            return None
+        try:
+            return bool((r.json() or {}).get("is_blocked"))
+        except ValueError:
+            return None
+
+    def patient_has_block(self, patient_guid: str):
+        """Does the patient have ANY active block? (metadata, counts only.)
+
+        ``GET /api/v1/patients/<p>/blocks/metadata`` — relationship-free
+        (legal 2026-06-04, any authenticated caller); returns
+        ``blocked_source_count``. Drives the coarse spärr badge on the patient
+        LIST without leaking which sources. Returns True/False, or ``None`` on
+        an ips error."""
+        if not self.base_url or not patient_guid:
+            return None
+        url = f"{self.base_url}/api/v1/patients/{patient_guid}/blocks/metadata"
+        try:
+            r = requests.get(url, headers=self._headers(), timeout=self.timeout)
+        except requests.RequestException:
+            return None
+        if r.status_code != 200:
+            return None
+        try:
+            return int((r.json() or {}).get("blocked_source_count") or 0) > 0
+        except ValueError:
+            return None
+
     def analysis_filter(
         self,
         patient_guids: list,

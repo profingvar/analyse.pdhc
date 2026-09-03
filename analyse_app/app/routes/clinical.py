@@ -55,16 +55,17 @@ def _bearer() -> str | None:
 
 
 def _block_checker(bearer):
-    """Return f(patient_guid)->bool using ips.pdhc active blocks (spärr)."""
+    """f(patient_guid)->bool for the LIST spärr badge.
+
+    Uses ips ``/blocks/metadata`` (relationship-free, counts only) — NOT the
+    ``/blocks`` list, which 403s / redacts for unrelated callers and would
+    make every patient look un-blocked (#579/item-3). Fail-safe on an ips
+    error: show the badge (hide counters) rather than imply "no spärr"."""
     client = IpsClient(token=bearer)
 
     def check(patient_guid):
-        try:
-            return bool(client.fetch_active_blocks(patient_guid))
-        except Exception:
-            # Fail closed for spärr: if we cannot confirm, treat as blocked
-            # so no data leaks past an unverifiable block.
-            return True
+        has = client.patient_has_block(patient_guid)
+        return True if has is None else bool(has)   # None (ips error) → safe
 
     return check
 
@@ -91,27 +92,22 @@ def patients():
     return jsonify(result)
 
 
-def _active_blocks(bearer, patient_guid):
-    """(blocks, fail_closed) — the patient's active spärr blocks.
+def _source_block_check(bearer, patient_guid):
+    """Memoised f(org_guid)->True|False|None for one patient.
 
-    ``fail_closed`` is True when ips could not be consulted, so the route
-    treats a non-admin caller as blocked (no data leaks past an
-    unverifiable block). fetch_active_blocks already swallows network
-    errors to [] internally; this guards the unexpected-exception path."""
+    Backed by ips ``/blocks/check?source_clinic_id=<org>`` — relationship-free
+    and un-redacted. None = ips could not answer (caller fails safe)."""
     client = IpsClient(token=bearer)
-    try:
-        return list(client.fetch_active_blocks(patient_guid)), False
-    except Exception:  # noqa: BLE001
-        return [], True
+    memo: dict = {}
 
+    def check(org_guid):
+        if not org_guid:
+            return None
+        if org_guid not in memo:
+            memo[org_guid] = client.check_source_blocked(patient_guid, org_guid)
+        return memo[org_guid]
 
-def _block_ids(blocks):
-    out = []
-    for b in blocks or []:
-        gid = getattr(b, "guid", None)
-        if gid is not None:
-            out.append(str(gid))
-    return out
+    return check
 
 
 @bp.get("/patient/<guid>")
@@ -128,17 +124,15 @@ def patient_detail(guid):
     cdr_ids = [c.strip() for c in raw.split(",") if c.strip()] or None
     bearer = _bearer()
 
-    blocks, ips_unavailable = _active_blocks(bearer, guid)
     result = build_patient_detail(
         blob, guid, cdr_ids, _registry(),
-        bearer=bearer, blocks=blocks, ips_unavailable=ips_unavailable,
+        bearer=bearer, block_check=_source_block_check(bearer, guid),
     )
 
     if result["exposure"]:
         g._audit_event_type = "sparr_lift_exposure"
         g._audit_payload_snapshot = {"break_glass": True,
-                                     "exposed_orgs": result.get("exposed_orgs"),
-                                     "block_guids": _block_ids(blocks)}
+                                     "exposed_orgs": result.get("exposed_orgs")}
     elif result["blocked"]:
         g._audit_event_type = "sparr_hidden"
     return jsonify(result)

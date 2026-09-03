@@ -103,11 +103,9 @@ def test_patient_detail_admin_exposure_is_logged_and_visible(app, monkeypatch):
                         lambda *a, **k: _resp([_res("cdr1", [_obsc(_PAT_Y, "c1", "2026-01-01", org="clinicX")])]))
     monkeypatch.setattr("app.services.patient_directory.get_patient",
                         lambda g, bearer=None: {"name": "Y"})
-    block = type("B", (), {"guid": "blk-1", "is_active": True,
-                           "source_scope_type": "clinic",
-                           "source_scope_id": "clinicX"})()
-    monkeypatch.setattr("app.services.ips_client.IpsClient.fetch_active_blocks",
-                        lambda self, g: [block])
+    # /blocks/check says clinicX (the producing clinic) is blocked for this patient.
+    monkeypatch.setattr("app.services.ips_client.IpsClient.check_source_blocked",
+                        lambda self, p, org: org == "clinicX")
     c = app.test_client()
     r = c.get(f"/api/patient/{_PAT_Y}?cdr_ids=cdr1")
     assert r.status_code == 200

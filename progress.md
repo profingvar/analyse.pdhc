@@ -195,3 +195,23 @@ un-redacted list; (ii) registering an analyse service ApiKey in ips and
 fetching the list server-to-server; or (iii) switching the checker to per-org
 `GET /blocks/check?source_clinic_id=<org>` (relationship-free, un-redacted).
 Code currently does (path i) — safe only if the assumption holds.
+
+### #579 item-3 — spärr endpoint FIXED (fail-open risk closed)
+Read ips.pdhc blocks_routes.py: the `/blocks` LIST is @require_auth +
+_can_act_on_patient (403s an unrelated caller) AND redacts source_scope_id→None
+except the caller's own clinics — so the earlier per-clinic filter that fetched
+the list would fail OPEN for a cross-clinic analysis caller. Switched to the two
+RELATIONSHIP-FREE, un-redacted predicates:
+  - `GET /blocks/check?source_clinic_id=<org>` → {is_blocked, blocking_scopes}
+    — per-patient view checks each observation's meta.security org_guid; memoised
+    one call per distinct producing-org. None (ips error) → fail SAFE (hide for
+    a care caller; admin still sees, un-logged).
+  - `GET /blocks/metadata` → {blocked_source_count} — the list's coarse badge.
+IpsClient.check_source_blocked / patient_has_block added + unit-tested
+(test_ips_blocks.py). patient_detail now takes a block_check(org)->bool|None
+callable instead of a pre-fetched block list. 62 tests pass.
+
+Residual for cutover smoke (needs a real analysis-phase login): round-trip a
+real blocked patient end-to-end (confirm /blocks/check accepts the professional
+token as expected) + confirm a live /clinics/<g>/patients body (names). Both are
+source-confirmed; only the live token round-trip is unverified.
