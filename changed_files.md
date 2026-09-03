@@ -75,3 +75,12 @@
 - analyse_app/app/__init__.py — register clinical_bp
 - analyse_app/app/templates/choose_patient.html (new) — nav + CDR selector + patient table
 - analyse_app/tests/{test_patient_list,test_clinical_api}.py (new); test_sso_web.py updated
+
+## 2026-09-03T00:00:00Z — #579 Stage 2: per-patient dashboard + spärr enforcement + admin log
+- analyse_app/app/analyse/patient_detail.py (new) — per-patient series assembler, spärr enforced on data
+- analyse_app/app/routes/clinical.py — GET /api/patient/<guid>, GET /api/admin/sparr-log; audit exposure/hidden
+- analyse_app/app/routes/views.py — /patient/<guid> shell, /admin/sparr-log (admin_required)
+- analyse_app/app/templates/patient_detail.html (new) — demographics, spärr banner, CDR picker, per-series sparklines
+- analyse_app/app/templates/sparr_log.html (new) — admin oversight over sparr_lift_exposure/sparr_hidden
+- analyse_app/app/templates/choose_patient.html — Spärrlogg nav link
+- analyse_app/tests/test_patient_detail.py (new); test_clinical_api.py extended (patient + admin-log + exposure-logged)

@@ -90,3 +90,59 @@ dashboard.pdhc. Local tests green; server deploy + cutover tickets (#540/#541/
 ## newtask.txt = next focus
 Deploy (1.c/1.d in readme) + #540 gateway ANALYSE_BASE_URL repoint + #541 CDR
 identity flip.
+
+## LIVE CUTOVER — 2026-08-08 (analyse.pdhc deployed + wired)
+- SSO: client analyse-pdhc registered in sso .env; callback+origin added to
+  ALLOWED_CALLBACK_URLS/ALLOWED_ORIGINS. analyse SSO login works.
+- vhost: analyse.pdhc.se (letsencrypt, /healthz 200), nginx sites-available/enabled.
+- deploy: /usr/local/www/analyse.pdhc/current, docker-compose analyse_pdhc,
+  app 9110 / db 9111, alembic head 0001_initial, /healthz 200 local+public.
+- #541: cdr2-5 trust analyse.pdhc (surgical in-place patch — prod behind local
+  git, see memory infra_cdr_prod_behind_local_git). analyse federates cdr2-5
+  (registry=4). cdr6 (sim-only codebase) deferred + dropped from CDR_ENDPOINTS.
+- #540: gateway ANALYSE_BASE_URL=http://host.docker.internal:9110; gateway->analyse
+  reachable (200), gateway health 200, cdr1 forwarder intact.
+- REMAINING: #543 remove dashboard group-half + dashboard CDR read-identity;
+  #547 rebrand dashboard->cd-assist + www cards; deploy #546 nurse fold; #544
+  cleanup + commit. dashboard prod likely behind local git too — patch carefully.
+
+## 2026-09-03 — #579 Stage 2 (per-patient dashboard + full spärr + admin log)
+Continuation of #578. Built locally, NOT deployed (analyse cutover is
+operator-blocked). 54 tests pass.
+
+Delivered:
+- **Item 1 — per-patient Dashboard view.** `GET /api/patient/<guid>?cdr_ids=`
+  (`app/analyse/patient_detail.py`) fans out one patient-filtered
+  `/api/v1/fhir/Observation` per selected CDR, groups into per-concept series
+  (code from `code.coding[0]`, value from `valueQuantity`, unit, points sorted
+  by date, latest). Page shell `/patient/<guid>` → `patient_detail.html`
+  (demographics, CDR picker, per-series inline-SVG sparklines). The list rows
+  already linked here.
+- **Item 2 — full spärr enforcement + logging.** Non-admin + active block →
+  data HIDDEN (empty series, `fanout_mode:"hidden"`, banner), the CDR read is
+  short-circuited (no fetch). Admin + active block → break-glass EXPOSURE:
+  data returned and an `AnalyseAudit` row is written with
+  `event_type=sparr_lift_exposure` + `payload_snapshot.block_guids`. Non-admin
+  fail-closed when ips is unreachable. Admin oversight view
+  `/admin/sparr-log` (+ `GET /api/admin/sparr-log`, admin_required) surfaces
+  sparr_lift_exposure/sparr_hidden/admin_override rows. audit_read is the OUTER
+  decorator on the patient route so 403 denials are logged too.
+- **Item 4 — admin-list scope DECISION.** Admin list stays data-scoped
+  (patients with CDR data in the selected CDRs), NOT "all ips patients". Reason:
+  the "choose patient" list is a working entry point; a zero-data patient has
+  nothing to open, and an unbounded cross-org roster is a privacy-broad default.
+  A specific no-data patient is reachable by direct guid, not by browse.
+
+Remaining in #579 (operator-blocked, cannot close):
+- **Item 3 — live-shape verification.** patient_detail/patient_list parse
+  tolerantly, but the exact ips `/clinics/<g>/patients` and CDR
+  `/fhir/Observation` JSON must be confirmed against the running services once
+  analyse is deployed (esp. org_guid location on the FHIR Observation for a
+  finer-grained per-clinic spärr filter than today's coarse patient-level hide).
+- **Item 5 — deploy/cutover.** SSO client reg, service keys, CDR2–6 URLs,
+  vhost analyse.pdhc.se + DNS/TLS. HIGH blast — operator-coordinated.
+
+Note (SQLite test artifact): the `analyse_audit.patient_guid` UUID column takes
+NUMERIC affinity under SQLite, so an all-digit guid is coerced to a float on
+write. Prod Postgres has a real `uuid` column and is unaffected; tests use
+uuid4-shaped guids (hex letters) to keep TEXT affinity.
