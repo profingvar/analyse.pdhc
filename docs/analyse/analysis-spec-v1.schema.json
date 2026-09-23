@@ -1,0 +1,582 @@
+{
+  "$defs": {
+    "AgeBand": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "anyOf": [
+            {
+              "maximum": 120,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "From"
+        },
+        "to": {
+          "anyOf": [
+            {
+              "maximum": 120,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "To"
+        }
+      },
+      "title": "AgeBand",
+      "type": "object"
+    },
+    "AgeCriterion": {
+      "additionalProperties": false,
+      "properties": {
+        "age_band": {
+          "$ref": "#/$defs/AgeBand"
+        }
+      },
+      "required": [
+        "age_band"
+      ],
+      "title": "AgeCriterion",
+      "type": "object"
+    },
+    "Agg": {
+      "description": "How repeated observations collapse to one value per patient.",
+      "enum": [
+        "first",
+        "last",
+        "mean",
+        "min",
+        "max",
+        "count",
+        "slope",
+        "time_to_first_event"
+      ],
+      "title": "Agg",
+      "type": "string"
+    },
+    "Bins": {
+      "additionalProperties": false,
+      "properties": {
+        "range": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Range",
+          "type": "array"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "number"
+        }
+      },
+      "required": [
+        "width",
+        "range"
+      ],
+      "title": "Bins",
+      "type": "object"
+    },
+    "Cohort": {
+      "additionalProperties": false,
+      "properties": {
+        "include": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ObservationCriterion"
+              },
+              {
+                "$ref": "#/$defs/AgeCriterion"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Include",
+          "type": "array"
+        }
+      },
+      "required": [
+        "include"
+      ],
+      "title": "Cohort",
+      "type": "object"
+    },
+    "CompareGroups": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "compare_groups",
+          "title": "Type",
+          "type": "string"
+        },
+        "vars": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Vars",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "vars"
+      ],
+      "title": "CompareGroups",
+      "type": "object"
+    },
+    "Completeness": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "completeness",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "Completeness",
+      "type": "object"
+    },
+    "Correlation": {
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "default": "pearson",
+          "enum": [
+            "pearson",
+            "spearman"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "type": {
+          "const": "correlation",
+          "title": "Type",
+          "type": "string"
+        },
+        "vars": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "title": "Vars",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "vars"
+      ],
+      "title": "Correlation",
+      "type": "object"
+    },
+    "Describe": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "describe",
+          "title": "Type",
+          "type": "string"
+        },
+        "vars": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Vars",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "vars"
+      ],
+      "title": "Describe",
+      "type": "object"
+    },
+    "Frequency": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "frequency",
+          "title": "Type",
+          "type": "string"
+        },
+        "vars": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Vars",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "vars"
+      ],
+      "title": "Frequency",
+      "type": "object"
+    },
+    "Group": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "where": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object"
+          },
+          "minProperties": 1,
+          "title": "Where",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name",
+        "where"
+      ],
+      "title": "Group",
+      "type": "object"
+    },
+    "Histogram": {
+      "additionalProperties": false,
+      "properties": {
+        "bins": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bins"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "type": {
+          "const": "histogram",
+          "title": "Type",
+          "type": "string"
+        },
+        "var": {
+          "title": "Var",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "var"
+      ],
+      "title": "Histogram",
+      "type": "object"
+    },
+    "IndexEvent": {
+      "additionalProperties": false,
+      "description": "The zero point for every day offset in the spec.\n\nQuasi-identifier coarsening (AN-2) expresses dates as days relative to\nthis, so a spec without one cannot use windows.",
+      "properties": {
+        "observation": {
+          "minLength": 1,
+          "title": "Observation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "observation"
+      ],
+      "title": "IndexEvent",
+      "type": "object"
+    },
+    "Linkage": {
+      "description": "How the same patient appearing in several CDRs is treated.",
+      "enum": [
+        "shared_guid",
+        "none",
+        "keyed_hash"
+      ],
+      "title": "Linkage",
+      "type": "string"
+    },
+    "ObservationCriterion": {
+      "additionalProperties": false,
+      "properties": {
+        "observation": {
+          "minLength": 1,
+          "title": "Observation",
+          "type": "string"
+        },
+        "op": {
+          "$ref": "#/$defs/Op"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "observation",
+        "op",
+        "value"
+      ],
+      "title": "ObservationCriterion",
+      "type": "object"
+    },
+    "Op": {
+      "enum": [
+        ">=",
+        ">",
+        "<=",
+        "<",
+        "==",
+        "!="
+      ],
+      "title": "Op",
+      "type": "string"
+    },
+    "OverTime": {
+      "additionalProperties": false,
+      "properties": {
+        "bin_days": {
+          "exclusiveMinimum": 0,
+          "title": "Bin Days",
+          "type": "integer"
+        },
+        "range_days": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Range Days",
+          "type": "array"
+        },
+        "type": {
+          "const": "over_time",
+          "title": "Type",
+          "type": "string"
+        },
+        "var": {
+          "title": "Var",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "var",
+        "bin_days",
+        "range_days"
+      ],
+      "title": "OverTime",
+      "type": "object"
+    },
+    "Purpose": {
+      "description": "Secondary-use purposes, as ips.pdhc defines them.\n\nSent to cdr as ``X-Access-Purpose`` (#664) and written to the audit log.",
+      "enum": [
+        "research",
+        "statistics",
+        "quality_registry"
+      ],
+      "title": "Purpose",
+      "type": "string"
+    },
+    "Variable": {
+      "additionalProperties": false,
+      "properties": {
+        "agg": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Agg"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "from": {
+          "minLength": 1,
+          "title": "From",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "window_days": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Window Days"
+        }
+      },
+      "required": [
+        "name",
+        "from"
+      ],
+      "title": "Variable",
+      "type": "object"
+    }
+  },
+  "$id": "https://analyse.pdhc.se/schema/analysis-spec-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "allow_overlapping_groups": {
+      "default": false,
+      "title": "Allow Overlapping Groups",
+      "type": "boolean"
+    },
+    "analyses": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "compare_groups": "#/$defs/CompareGroups",
+            "completeness": "#/$defs/Completeness",
+            "correlation": "#/$defs/Correlation",
+            "describe": "#/$defs/Describe",
+            "frequency": "#/$defs/Frequency",
+            "histogram": "#/$defs/Histogram",
+            "over_time": "#/$defs/OverTime"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/Describe"
+          },
+          {
+            "$ref": "#/$defs/Histogram"
+          },
+          {
+            "$ref": "#/$defs/Frequency"
+          },
+          {
+            "$ref": "#/$defs/Correlation"
+          },
+          {
+            "$ref": "#/$defs/CompareGroups"
+          },
+          {
+            "$ref": "#/$defs/OverTime"
+          },
+          {
+            "$ref": "#/$defs/Completeness"
+          }
+        ]
+      },
+      "minItems": 1,
+      "title": "Analyses",
+      "type": "array"
+    },
+    "cohort": {
+      "$ref": "#/$defs/Cohort"
+    },
+    "groups": {
+      "items": {
+        "$ref": "#/$defs/Group"
+      },
+      "title": "Groups",
+      "type": "array"
+    },
+    "index_event": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/IndexEvent"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "linkage": {
+      "$ref": "#/$defs/Linkage",
+      "default": "shared_guid"
+    },
+    "purpose": {
+      "$ref": "#/$defs/Purpose"
+    },
+    "sources": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Sources",
+      "type": "array"
+    },
+    "spec_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Spec Version",
+      "type": "integer"
+    },
+    "title": {
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "variables": {
+      "items": {
+        "$ref": "#/$defs/Variable"
+      },
+      "title": "Variables",
+      "type": "array"
+    }
+  },
+  "required": [
+    "title",
+    "purpose",
+    "sources",
+    "cohort",
+    "analyses"
+  ],
+  "title": "PDHC analysis spec, version 1",
+  "type": "object"
+}

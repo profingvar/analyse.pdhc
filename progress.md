@@ -243,3 +243,63 @@ datapoints; a patient dashboard renders series/sparklines; spärr hides/badges
 if any blocked patient exists; admin sees /admin/sparr-log. That smoke also
 resolves the last item-3 residual (ips token round-trip + /clinics/patients
 names live). After it passes, #579 can be closed.
+
+---
+
+## 2026-09-23 — #644 (AN-1): the analysis spec
+
+75 tests pass (43 after the #663 removal, +32 here). Phase 1's first ticket.
+
+**What it is.** `app/spec/` — the declarative, versioned document that is the
+only thing a node will execute. The UI and the CLI both produce specs; neither
+sends a free-form query to a node.
+
+**Two deliberate departures from the brief**, both from AN-0 discovery:
+
+1. **`purpose` uses the PLATFORM's closed enum**, not the brief's vocabulary.
+   The brief's example says `quality_followup`, which is not a real value
+   anywhere in PDHC. ips.pdhc owns the enum and cdr enforces it (#664);
+   inventing a parallel vocabulary would mean translating at the boundary and
+   getting it wrong once. (Gap G6.)
+2. **Only SECONDARY-use purposes are accepted** — research, statistics,
+   quality_registry. Analysis reads for secondary use by definition, and
+   `administration` is *never blocked* by ips, so accepting it would make
+   `purpose` a way around consent rather than a way of declaring it. This
+   mirrors the guard shipped in cdr #664.
+
+**The reproducibility contract.** Every result carries the spec hash, the
+coordinator and node versions, and per-source snapshot times. For that to mean
+anything the hash must be a property of the spec's MEANING, not of how it was
+written:
+- sorted keys, no incidental whitespace, UTF-8
+- defaults are INCLUDED, so relying on a default and stating it hash the same
+  — otherwise changing a default later would silently re-hash every stored
+  spec and old results could no longer be traced
+- nulls are NOT dropped, so omitted and explicitly-null agree
+- hash is prefixed `sha256:` so it stays verifiable if the algorithm changes
+- **snapshots are per source, not global** — federated sources are read at
+  different moments and one timestamp would be a fiction
+
+There is a test that hashes the same spec in three subprocesses under
+different `PYTHONHASHSEED` values, because a hash that depended on dict
+iteration order would be reproducible only within a single run.
+
+**Validation worth knowing about.** Unknown keys are an error, not ignored —
+a silently dropped field is a figure computed from something other than what
+the analyst wrote. Cross-references resolve at parse time (an analysis or a
+group naming an undeclared variable fails here rather than at the node, after
+the read). `window_days` and `over_time` require an `index_event`, since day
+offsets have no zero point without one. A series variable must say how it
+collapses; a `demographics.*` / `meta.*` variable must not. Overlapping groups
+are opt-in.
+
+`meta.author_org` — the field cdr #665 added — is a usable variable source,
+and takes no agg.
+
+**Schema is GENERATED**, never hand-written, and committed as
+`docs/analyse/analysis-spec-v1.schema.json`. `flask spec-schema` regenerates
+it. A hand-maintained schema drifts from the models it claims to describe, and
+the drift is invisible until a spec validates here and fails at the node.
+
+**New dependency:** pydantic>=2.7. Verified to have a Python 3.14 wheel, the
+check ADR-0004 asks for (2.13.5 installs clean).

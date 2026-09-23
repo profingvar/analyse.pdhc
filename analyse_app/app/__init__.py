@@ -143,5 +143,9 @@ def create_app(config=None) -> Flask:
     app.register_blueprint(analyse_openehr_bp)
 
     register_export_audit_cli(app)
+    # #644: `flask spec-schema` regenerates the JSON Schema artefact from the
+    # models, so the committed schema cannot drift from what it describes.
+    from app.cli import register_spec_cli
+    register_spec_cli(app)
 
     return app

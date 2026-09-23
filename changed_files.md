@@ -109,3 +109,14 @@
   (rsync of HEAD analyse_app/, .env preserved, docker-compose up -d --build,
   image analyse_pdhc-app rebuilt, /healthz=0.2.0-reform). Predeploy backup in
   ~/backups/predeploy/analyse.pdhc/.
+
+## 2026-09-23 — #644 AN-1: analysis spec
+- analyse_app/app/spec/models.py (new) — Pydantic models, platform purpose enum
+- analyse_app/app/spec/digest.py (new) — canonicalisation, spec_hash, provenance
+- analyse_app/app/spec/schema.py (new) — JSON Schema generated from the models
+- analyse_app/app/spec/__init__.py (new)
+- analyse_app/app/cli.py — `flask spec-schema` regeneration command
+- analyse_app/app/__init__.py — register the spec CLI
+- analyse_app/requirements.txt — pydantic>=2.7
+- analyse_app/tests/test_spec.py (new, 32)
+- docs/analyse/analysis-spec-v1.schema.json (new, generated artefact)
