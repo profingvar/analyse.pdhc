@@ -152,3 +152,9 @@
 - analyse_app/app/node/__init__.py (new)
 - analyse_app/requirements.txt — PyYAML
 - analyse_app/tests/test_node.py (new, 22)
+
+## 2026-09-23 — #650 AN-7: test harness + identifier gate
+- analyse_app/app/testing/scanner.py (new) — identifier scanner
+- analyse_app/app/testing/__init__.py (new)
+- analyse_app/scripts/gate.sh (new) — runs the suite then scans its output; exit 1 on a hit
+- analyse_app/tests/test_harness.py (new, 47)

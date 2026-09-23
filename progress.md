@@ -511,3 +511,41 @@ typo is a control the organisation believes it has and does not.
 **`data_mode` defaults to synthetic** and live requires an explicit
 `allow_live`. It must not be possible to point this at real patients by
 forgetting a flag.
+
+---
+
+## 2026-09-23 — #650 (AN-7): test harness and the identifier gate
+
+295 tests pass (+47). Built before AN-6 deliberately: a scanner written late
+is written against code that already leaks.
+
+**Federated equals pooled, proven.** Data split at random across 1–5 nodes,
+three seeds each, for describe (mean, SD vs SciPy's `tstd`), Pearson (vs
+`pearsonr`), histogram counts and frequency counts — all to a relative
+tolerance of 1e-9.
+
+**Approximate is not the same as unbounded.** The sketch's median is asserted
+within 2% of the true median over six seeds, so a regression that quietly
+degrades it is caught rather than excused by the `approximate` flag.
+
+**The gate is a gate.** `scripts/gate.sh` runs the suite, scans everything it
+printed, and **exits 1** on a hit. Verified both directions: a deliberately
+planted guid produces exit 1, and removing it produces exit 0. A gate that
+prints FAIL and exits 0 is a report.
+
+It scans OUTPUT, not source — test files legitimately contain concept guids
+and `FORBIDDEN-*` sentinels; what must never appear is one of them in
+something the code produced.
+
+**Scanner design.** Deliberately crude and noisy: one tuned to avoid false
+positives is one that misses the real leak, and a false positive costs a
+minute where a missed identifier costs a patient. Personnummer are matched on
+**shape, not checksum** — a near-miss in an output is still someone trying to
+put one there. Dictionary **keys** are scanned as well as values, because a
+dict keyed by patient guid discloses exactly as much as one that stores it.
+Pseudonyms (16 hex, no dashes) deliberately do not match, or the gate would
+block every real output.
+
+One test asserts the scanner fires on a **real engine result** carrying
+guid-shaped values, not only on crafted strings — otherwise it would prove
+nothing about the pipeline.
