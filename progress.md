@@ -740,3 +740,49 @@ five-task walkthrough the brief requires and it **has not been run**. Unit
 tests can show a sentence never contains the word "causes"; they cannot show
 that a reader does not infer causation anyway. Five participants who match the
 target and have not seen the tool being built are what closes this phase.
+
+---
+
+## 2026-09-23 — Phase 4: extensions (#659–#661)
+
+423 tests pass. Gate clean.
+
+**#659 regression and Kaplan-Meier.** Both exactly federatable, which is why
+they are here rather than in an approximate bucket: linear returns XᵀX, Xᵀy,
+yᵀy and n, which add; Kaplan-Meier returns events and at-risk per interval,
+which add. A Hessian is a matrix of sums, not a dataset. Federated equals
+pooled to 1e-9. A singular system is **refused rather than guessed** — a
+plausible-looking answer from collinear predictors is worse than no answer.
+
+**#660 keyed_hash, gated and limited to counting.** ADR-0010. The line is one
+set operation wide: `deduplicated_count` returns a **number** and deliberately
+not the union, the overlap or which tokens matched, because a coordinator
+holding the overlap could go back to a node and ask about those specific
+patients. `join_across_nodes()` exists purely to raise, so the attempt fails
+loudly rather than someone assembling the join from a set intersection and
+concluding it was permitted because nothing stopped them.
+
+The key is held by the nodes, **never the coordinator** — a coordinator with
+it could compute tokens for any identity it guessed and test them against what
+the nodes returned, turning a deduplication token into an identity oracle.
+
+**And the honest part: this mode is unusable today.** Gap G9 — the CDR holds
+no personnummer. The token would have to come from ips.pdhc, and that path
+does not exist. Shipped as a tested mechanism and a documented boundary, not
+as a working feature. The legal basis is also not established, and the flag is
+where that assertion becomes deliberate.
+
+**#661 differencing hardening.** Three changes, and one is a **behaviour
+change**: the default is now **advisory**, not hard-block. A false positive
+here blocks legitimate work — two cohorts can differ by four patients for
+entirely innocent reasons — and a recorded warning is still evidence if a
+pattern emerges. `HARD` is available for an organisation that wants it.
+
+History is keyed by **user and persists across sessions**; keying it by
+session would make logging out and back in the whole attack. A cohort
+submitted under the **same recipe_id is a rerun, not a probe** — a saved
+recipe run monthly will legitimately differ by a patient or two, and treating
+that as an attack would make recipes unusable, which is the brief's own
+feature. Near misses land in an admin view that carries **no cohort
+membership**: a screen about disclosure risk must not itself be a place where
+cohorts can be read.

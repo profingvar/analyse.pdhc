@@ -1,6 +1,6 @@
 """Analysis engine: one module per type, each local / merge / finalize."""
 from . import (compare_groups, completeness, correlation, describe,
-               frequency, histogram, over_time)
+               frequency, histogram, over_time, regression)
 from .base import APPROXIMATE, EXACT, Partial, Result
 from .sketch import TDigest
 
@@ -13,8 +13,12 @@ REGISTRY = {
     compare_groups.KIND: compare_groups,
     over_time.KIND: over_time,
     completeness.KIND: completeness,
+    # #659: registered by kind so the coordinator dispatches uniformly; the
+    # local/merge/finalize triple is named per model rather than generic.
+    regression.LINEAR: regression,
+    regression.KM: regression,
 }
 
 __all__ = ["Partial", "Result", "EXACT", "APPROXIMATE", "TDigest",
            "REGISTRY", "describe", "histogram", "frequency", "correlation",
-           "compare_groups", "over_time", "completeness"]
+           "compare_groups", "over_time", "completeness", "regression"]

@@ -199,3 +199,12 @@
 - analyse_app/tests/test_ui.py (new, 35)
 - docs/analyse/usability-test.md (new) — the walkthrough, NOT YET RUN
 - docs/analyse/decisions/0009-server-rendered-frontend.md (new)
+
+## 2026-09-23 — Phase 4 (#659 AN-16, #660 AN-17, #661 AN-18)
+- analyse_app/app/engine/regression.py (new) — linear, Kaplan-Meier, federated exactly
+- analyse_app/app/engine/__init__.py — registry
+- analyse_app/app/privacy/linkage.py (new) — keyed_hash, gated, counting only
+- analyse_app/app/privacy/disclosure.py — DifferencingGuard hardened
+- analyse_app/tests/test_phase4.py (new, 21)
+- analyse_app/tests/test_disclosure.py — updated for the advisory default
+- docs/analyse/decisions/0010-keyed-hash-linkage.md (new)

@@ -186,13 +186,63 @@ class TestHistogramsAndCounts:
 
 class TestDifferencingGuard:
 
-    def test_two_cohorts_differing_by_one_patient_are_blocked(self):
+    def test_two_cohorts_differing_by_one_patient_are_warned(self):
         """Neither query is wrong on its own; only the pair is. That is why
-        this needs history rather than a per-query rule."""
+        this needs history rather than a per-query rule.
+
+        #661 changed the DEFAULT from hard-block to advisory-with-record: a
+        false positive here blocks legitimate work, since two cohorts can
+        differ by four patients for entirely innocent reasons, and a recorded
+        warning is still evidence if a pattern emerges."""
         g = DifferencingGuard(P)
         base = {f"p{i}" for i in range(50)}
-        assert g.check("u1", base)["allowed"] is True
+        assert g.check("u1", base)["warned"] is False
+        second = g.check("u1", base - {"p7"})
+        assert second["warned"] is True
+        assert second["allowed"] is True          # advisory by default
+
+    def test_hard_mode_actually_refuses(self):
+        from app.privacy.disclosure import HARD
+        g = DifferencingGuard(P, mode=HARD)
+        base = {f"p{i}" for i in range(50)}
+        g.check("u1", base)
         assert g.check("u1", base - {"p7"})["allowed"] is False
+
+    def test_a_rerun_of_the_same_recipe_is_not_a_probe(self):
+        """A saved recipe run monthly will legitimately differ by a patient
+        or two each time. Treating that as an attack would make recipes
+        unusable — and recipes are the brief's own feature."""
+        g = DifferencingGuard(P)
+        base = {f"p{i}" for i in range(50)}
+        g.check("u1", base, recipe_id="r-7")
+        later = g.check("u1", base - {"p7"}, recipe_id="r-7")
+        assert later["warned"] is False
+
+    def test_a_different_recipe_is_still_compared(self):
+        g = DifferencingGuard(P)
+        base = {f"p{i}" for i in range(50)}
+        g.check("u1", base, recipe_id="r-7")
+        assert g.check("u1", base - {"p7"}, recipe_id="r-9")["warned"] is True
+
+    def test_history_survives_a_new_session(self):
+        """Keying history by session would make logging out and back in the
+        whole attack."""
+        g = DifferencingGuard(P)
+        base = {f"p{i}" for i in range(50)}
+        g.check("u1", base, session_id="s1")
+        assert g.check("u1", base - {"p7"}, session_id="s2")["warned"] is True
+
+    def test_the_admin_view_shows_near_misses_without_cohorts(self):
+        """An admin screen about disclosure risk must not itself be a place
+        where cohorts can be read."""
+        g = DifferencingGuard(P)
+        base = {f"p{i}" for i in range(50)}
+        g.check("u1", base)
+        g.check("u1", base - {"p7"})
+        view = g.admin_view()
+        assert len(view) == 1 and view[0]["difference"] == 1
+        assert "cohort" not in repr(view)
+        assert "p7" not in repr(view)
 
     def test_a_genuinely_different_cohort_is_allowed(self):
         g = DifferencingGuard(P)
@@ -205,13 +255,13 @@ class TestDifferencingGuard:
         g = DifferencingGuard(P)
         c = {f"p{i}" for i in range(50)}
         g.check("u1", c)
-        assert g.check("u1", c)["allowed"] is True
+        assert g.check("u1", c)["warned"] is False
 
     def test_history_is_per_user(self):
         g = DifferencingGuard(P)
         base = {f"p{i}" for i in range(50)}
         g.check("u1", base)
-        assert g.check("u2", base - {"p7"})["allowed"] is True
+        assert g.check("u2", base - {"p7"})["warned"] is False
 
     def test_a_refused_probe_is_still_recorded(self):
         """Otherwise an attacker could retry variations indefinitely, each

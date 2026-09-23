@@ -6,7 +6,8 @@ it should say that it does.
 """
 from .disclosure import (
     DEFAULT_CORRELATION_MIN_N, DEFAULT_K_MIN, DEFAULT_PERCENTILE_RANGE,
-    SUPPRESSED, DifferencingGuard, DisclosureError, DisclosurePolicy,
+    ADVISORY, HARD, SUPPRESSED, DifferencingGuard, DisclosureError,
+    DisclosurePolicy,
     SuppressedTable, merge_small_bins, round_for_public, safe_correlation,
     safe_group_comparison, safe_range, safe_summary, suppress_counts,
     suppress_table,
@@ -34,4 +35,5 @@ __all__ = [
     "safe_group_comparison", "safe_range", "merge_small_bins",
     "round_for_public", "DifferencingGuard",
     "DEFAULT_K_MIN", "DEFAULT_CORRELATION_MIN_N", "DEFAULT_PERCENTILE_RANGE",
+    "ADVISORY", "HARD",
 ]

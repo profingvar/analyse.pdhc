@@ -304,6 +304,15 @@ def round_for_public(value: int | float, policy: DisclosurePolicy):
 
 # ── differencing protection ───────────────────────────────────────────
 
+#: What a refusal does. Advisory lets an analyst proceed with a warning
+#: recorded; hard refuses. Advisory is the DEFAULT because a false positive
+#: here blocks legitimate work — two cohorts can differ by four patients for
+#: entirely innocent reasons — and a warning that is recorded is still
+#: evidence if a pattern emerges. An organisation that wants hard sets it.
+ADVISORY = "advisory"
+HARD = "hard"
+
+
 @dataclass
 class DifferencingGuard:
     """Per-user history of cohort membership, to catch subtraction attacks.
@@ -318,22 +327,59 @@ class DifferencingGuard:
     is advisory or hard).
     """
     policy: DisclosurePolicy
-    history: dict[str, list[frozenset[str]]] = field(default_factory=dict)
+    mode: str = ADVISORY
+    history: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    #: Every near miss, for the admin view. An attacker probing repeatedly is
+    #: visible as a PATTERN across attempts, never in any single one — so the
+    #: record has to outlive the attempt that produced it.
+    near_misses: list[dict[str, Any]] = field(default_factory=list)
 
-    def check(self, user_guid: str, cohort: Iterable[str]) -> dict[str, Any]:
-        """Compare against this user's earlier cohorts. Records either way, so
-        a refused query still counts as a probe."""
+    def check(self, user_guid: str, cohort: Iterable[str], *,
+              recipe_id: str | None = None,
+              session_id: str | None = None) -> dict[str, Any]:
+        """Compare against this user's earlier cohorts.
+
+        #661 hardening, three parts:
+
+        - History is keyed by USER and persists ACROSS SESSIONS. Keying it by
+          session would make logging out and back in the whole attack.
+        - A cohort submitted under the SAME recipe_id is a rerun on fresh
+          data, not a probe: a saved recipe run monthly will legitimately
+          differ by a patient or two each time, and treating that as an
+          attack would make recipes unusable — which is the brief's own
+          feature.
+        - A refused attempt is RECORDED either way, and lands in
+          ``near_misses`` for the admin view.
+        """
         new = frozenset(cohort)
         prior = self.history.setdefault(user_guid, [])
-        for old in prior:
-            diff = len(new.symmetric_difference(old))
+
+        for entry in prior:
+            if recipe_id is not None and entry.get("recipe_id") == recipe_id:
+                continue                      # a rerun, not a probe
+            diff = len(new.symmetric_difference(entry["cohort"]))
             if 0 < diff < self.policy.k_min:
-                prior.append(new)
-                return {"allowed": False,
-                        "reason": ("this cohort differs from an earlier one "
-                                   "by fewer patients than the minimum cell "
-                                   "size, which would disclose them by "
-                                   "subtraction"),
-                        "difference": diff}
-        prior.append(new)
-        return {"allowed": True}
+                record = {"user_guid": user_guid, "difference": diff,
+                          "recipe_id": recipe_id, "session_id": session_id,
+                          "mode": self.mode}
+                self.near_misses.append(record)
+                prior.append({"cohort": new, "recipe_id": recipe_id,
+                              "session_id": session_id})
+                return {
+                    "allowed": self.mode == ADVISORY,
+                    "warned": True,
+                    "mode": self.mode,
+                    "reason": ("this cohort differs from an earlier one by "
+                               "fewer patients than the minimum cell size, "
+                               "which would disclose them by subtraction"),
+                    "difference": diff,
+                }
+        prior.append({"cohort": new, "recipe_id": recipe_id,
+                      "session_id": session_id})
+        return {"allowed": True, "warned": False, "mode": self.mode}
+
+    def admin_view(self) -> list[dict[str, Any]]:
+        """Near misses, for an administrator. Carries no cohort membership —
+        an admin screen about disclosure risk must not itself be a place
+        where cohorts can be read."""
+        return [dict(m) for m in self.near_misses]
