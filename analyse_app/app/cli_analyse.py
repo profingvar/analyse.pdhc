@@ -71,9 +71,16 @@ def register(app):
     @click.option("--out", type=click.Path(file_okay=False), default=None)
     @click.option("--dry-run", is_flag=True,
                   help="Suppressed counts per source only. Runs no analysis.")
-    def spec_run(path, sources, out, dry_run):
-        """Run a spec through the coordinator."""
-        from app.coordinator import combine
+    @click.option("--project", default=None,
+                  help="Analysis project id. Selects the per-project "
+                       "pseudonym key each node loads from its own secret "
+                       "store; runs in different projects cannot be joined.")
+    def spec_run(path, sources, out, dry_run, project):
+        """Run a spec through the coordinator, across the configured nodes."""
+        from app.coordinator import NoSourcesAnswered, SourceStatus, run_distributed
+        from app.transport.client import endpoints_from_config
+        from app.transport.envelope import secret_from_config
+        from app.version import VERSION
 
         try:
             spec = load_spec(path)
@@ -88,6 +95,13 @@ def register(app):
                        err=True)
             raise SystemExit(2)
 
+        if not dry_run and not project:
+            click.echo(
+                "--project is required: the pseudonym key is per project and "
+                "has no safe default. Two runs under different projects "
+                "deliberately cannot be joined.", err=True)
+            raise SystemExit(2)
+
         if dry_run:
             click.echo(f"dry run — {spec.title}")
             click.echo(f"spec_hash: {spec_hash(spec)}")
@@ -99,9 +113,43 @@ def register(app):
             click.echo("No analysis was run and no data was read.")
             return
 
-        result = combine(spec, node_runs=[], coordinator_version="0.1.0",
-                         failures={s: "no node configured in this build"
-                                   for s in wanted})
+        # #684: the fan-out is real now. Sources named in the spec but not
+        # configured as endpoints are reported as unconfigured rather than
+        # silently dropped — a spec that asks about five regions and runs
+        # against three must not look like an answer about five.
+        endpoints = [e for e in endpoints_from_config(app.config)
+                     if e.node_id in wanted]
+        missing = sorted(set(wanted) - {e.node_id for e in endpoints})
+
+        try:
+            secret = secret_from_config(app.config)
+        except Exception as e:
+            click.echo(str(e), err=True)
+            raise SystemExit(2)
+
+        if not endpoints:
+            click.echo("no configured node for: " + ", ".join(missing),
+                       err=True)
+            raise SystemExit(2)
+
+        try:
+            result = run_distributed(
+                spec, endpoints, secret, project_id=project,
+                coordinator_version=VERSION,
+                timeout=float(app.config.get("ANALYSE_NODE_TIMEOUT", 60.0)))
+        except NoSourcesAnswered as e:
+            click.echo(str(e), err=True)
+            raise SystemExit(4)
+
+        for node_id in missing:
+            result.sources.append(
+                SourceStatus(source=node_id, ok=False,
+                             reason="no endpoint configured for this source"))
+        if missing:
+            result.notes.append(
+                f"{len(missing)} source(s) in this spec have no configured "
+                f"endpoint and contributed nothing: {', '.join(missing)}.")
+
         payload = result.to_json()
 
         leaks = scan_object(payload, where="cli output")
@@ -155,9 +203,12 @@ def register(app):
     @app.cli.command("sources-list")
     def sources_list():
         """Configured nodes and their status."""
-        endpoints = app.config.get("ANALYSE_NODES") or {}
+        from app.transport.client import endpoints_from_config
+        endpoints = endpoints_from_config(app.config)
         if not endpoints:
             click.echo("no nodes configured (ANALYSE_NODES is empty)")
             return
-        for name, url in sorted(endpoints.items()):
-            click.echo(f"{name}\t{url}")
+        role = app.config.get("ANALYSE_ROLE", "both")
+        click.echo(f"role: {role}")
+        for ep in sorted(endpoints, key=lambda e: e.node_id):
+            click.echo(f"{ep.node_id}\t{ep.run_url}")

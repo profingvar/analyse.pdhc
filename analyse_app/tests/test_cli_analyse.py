@@ -6,6 +6,9 @@ import json
 
 import pytest
 
+from app.testing import synth
+from tests.nodeserver import PROJECT, PROJECT_KEY, SECRET, Node
+
 GOOD = """
 spec_version: 1
 title: Pain in the home phase
@@ -35,6 +38,21 @@ def spec_file(tmp_path):
 
 def _run(app, args):
     return app.test_cli_runner().invoke(args=args)
+
+
+@pytest.fixture
+def live_nodes(app, monkeypatch):
+    """A coordinator app whose two sources are real nodes on real ports."""
+    monkeypatch.setenv(f"ANALYSE_PROJECT_KEY_{PROJECT.upper()}", PROJECT_KEY)
+    sources = synth.build(nodes=2, patients=200, seed=11)
+    started = [Node(s) for s in sources]
+    app.config["ANALYSE_NODES"] = {n.node_id: n.base_url for n in started}
+    app.config["ANALYSE_TRANSPORT_SECRET"] = SECRET
+    try:
+        yield app
+    finally:
+        for n in started:
+            n.close()
 
 
 class TestValidate:
@@ -87,22 +105,55 @@ class TestRun:
         assert r.exit_code == 2
         assert "cdr9" in r.output
 
-    def test_a_result_is_written_when_asked(self, app, spec_file, tmp_path):
+    def test_a_project_is_required(self, app, spec_file):
+        """The pseudonym key is per project and has no safe default: a run
+        that silently picked one could be joined to another project's."""
+        r = _run(app, ["spec-run", spec_file(GOOD)])
+        assert r.exit_code == 2
+        assert "--project is required" in r.output
+
+    def test_a_result_is_written_when_asked(self, live_nodes, spec_file,
+                                            tmp_path):
         out = tmp_path / "results"
-        r = _run(app, ["spec-run", spec_file(GOOD), "--out", str(out)])
+        r = _run(live_nodes, ["spec-run", spec_file(GOOD), "--out", str(out),
+                              "--project", PROJECT])
         assert r.exit_code == 0, r.output
         blob = json.loads((out / "result.json").read_text())
         assert blob["provenance"]["spec_hash"].startswith("sha256:")
+        assert [s["source"] for s in blob["sources"] if s["ok"]] == ["cdr1",
+                                                                    "cdr2"]
 
     def test_unreachable_sources_are_reported_not_hidden(self, app, spec_file):
-        r = _run(app, ["spec-run", spec_file(GOOD)])
-        assert r.exit_code == 0
-        blob = json.loads(r.output)
-        assert all(s["ok"] is False for s in blob["sources"])
+        """Every source in the spec must appear in the output, with a reason.
+        A source that simply vanished would make the run look like an answer
+        about a population it never covered."""
+        app.config["ANALYSE_NODES"] = {"cdr1": "http://127.0.0.1:1",
+                                       "cdr2": "http://127.0.0.1:1"}
+        app.config["ANALYSE_TRANSPORT_SECRET"] = SECRET
+        r = _run(app, ["spec-run", spec_file(GOOD), "--project", PROJECT])
+        # Nothing answered, so there is no result to print — and that is an
+        # error, not an empty result that reads as a tiny cohort.
+        assert r.exit_code == 4
+        assert "cdr1" in r.output and "cdr2" in r.output
 
-    def test_the_cli_never_prints_an_identifier(self, app, spec_file):
+    def test_a_source_with_no_endpoint_is_named(self, live_nodes, spec_file):
+        """Configured for cdr1 only: cdr2 must be reported as unconfigured,
+        not dropped from the spec."""
+        live_nodes.config["ANALYSE_NODES"] = {
+            k: v for k, v in live_nodes.config["ANALYSE_NODES"].items()
+            if k == "cdr1"}
+        r = _run(live_nodes, ["spec-run", spec_file(GOOD), "--project",
+                              PROJECT])
+        assert r.exit_code == 0, r.output
+        blob = json.loads(r.output)
+        by_src = {s["source"]: s for s in blob["sources"]}
+        assert by_src["cdr2"]["ok"] is False
+        assert "no endpoint configured" in by_src["cdr2"]["reason"]
+
+    def test_the_cli_never_prints_an_identifier(self, live_nodes, spec_file):
         from app.testing import scan_text
-        r = _run(app, ["spec-run", spec_file(GOOD)])
+        r = _run(live_nodes, ["spec-run", spec_file(GOOD), "--project",
+                              PROJECT])
         assert scan_text(r.output) == []
 
 

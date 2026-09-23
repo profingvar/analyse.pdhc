@@ -1,16 +1,25 @@
-analyse.pdhc REFORM (#578 + #579) DEPLOYED 2026-09-03 — live as 0.2.0-reform.
+# analyse.pdhc — current focus
 
-DONE: choose-patient landing (#578), per-patient dashboard + per-clinic spärr
-enforcement + admin spärr-log (#579 items 1,2,4), live-shape verification + 4
-fixes + fail-open fix via /blocks/check (#579 item 3), deploy (#579 item 5).
-All committed/pushed (HEAD b8c21bf); 62 tests pass.
+Reconstruction Phases 1–4 + AN-12 (the coordinator↔node wire) are BUILT.
+459 tests, gate clean. HEAD is local-only — none of it is deployed.
+Live at analyse.pdhc.se is still 0.2.0-reform (deployed 2026-09-03).
 
-NEXT = OPERATOR LIVE-SMOKE at https://analyse.pdhc.se (SSO-gated, I can't click):
-  1. Landing "choose patient": your org's patients w/ names + datapoints.
-  2. Click a patient -> dashboard: series + sparklines from CDR2-6.
-  3. If a blocked patient exists: data hidden + spärr badge/banner; admin sees
-     it (break-glass) + /admin/sparr-log logs the exposure.
-  4. Confirm names come through (ips /clinics/<g>/patients round-trip) and the
-     spärr /blocks/check token round-trip works with a real professional token.
-Then close #579. Rollback if needed: ln -snf releases/2026-08-08T08-30-34Z current
-+ docker-compose up -d --build (old scaffold), backups in ~/backups/predeploy/.
+## Next
+- #685 deploy the reconstruction. Read that ticket before starting: the
+  cdr2–5 federation wiring (#541) and the dashboard→analyse repoint (#540)
+  are DEPLOYED-ONLY, not in git, and a wholesale deploy drops them.
+- #686 gap G6 — the federated stack has still never run against real CDRs.
+  AN-12 removed the blocker (there is a wire now); the rest is deployment.
+- #688 Phase 3 usability walkthrough (acceptance outstanding).
+- #687 gap G9 — keyed_hash has no identifier source. A decision, not code.
+
+## Carried gap from AN-12
+A node cannot derive its cohort from `spec.cohort.include`:
+`run_spec()` never reads the inclusion criteria, and the CDR has no
+criterion-search endpoint. `ConfiguredCohortSource` (operator pins the
+cohort per node) is what a deployment gets today. Ticketed separately.
+
+## Operator live-smoke never confirmed (from the 2026-09-03 reform)
+Landing "choose patient", per-patient dashboard from CDR2-6, spärr badge +
+admin spärr-log, names via ips /clinics/<guid>/patients. SSO-gated, needs a
+human with a real professional token. Folded into #685's acceptance.

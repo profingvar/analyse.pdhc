@@ -786,3 +786,69 @@ that as an attack would make recipes unusable, which is the brief's own
 feature. Near misses land in an admin view that carries **no cohort
 membership**: a screen about disclosure risk must not itself be a place where
 cohorts can be read.
+
+---
+
+## 2026-09-23 — AN-12 (#684): the coordinator↔node wire
+
+459 tests pass (+36). Gate clean. **ADR-0011.**
+
+**What was missing.** Phases 1–4 built a node that computes partials and a
+coordinator that merges them, and nothing that carried a partial between two
+processes. `app/coordinator/` held `merge.py` and `signing.py` and no client;
+there was no node HTTP surface and no transport abstraction. Every test drove
+both halves in one process, so "federated" was true of the mathematics and not
+of the deployment. `spec-run` reported every source as *"no node configured in
+this build"* — the hole was at least honest about itself.
+
+**The acceptance question was parity**, and it is now a test: two nodes served
+by real werkzeug servers on real ports, driven over real sockets, produce
+`wire.results == local.results` against the in-process harness. If the
+transport changed the answer it would be the one thing it must never do.
+
+**The MAC covers the transmitted octets.** The obvious implementation — parse,
+re-serialise canonically, compare — makes the signature a property of what the
+receiver's parser produced rather than of what the sender sent. The spec
+signature may canonicalise, because AN-1 guarantees a spec has exactly one
+canonical form; partials carry floats and sketch centroids, which is precisely
+where re-serialisation moves bytes. `kind` and `issued_at` are inside the MAC,
+so a response cannot be replayed into a request endpoint and a captured
+envelope cannot be re-dated.
+
+**Two signatures, two questions.** The envelope says *the other half of this
+deployment sent these bytes*; the spec signature says *the coordinator
+approved this analysis*. Writing the e2e test surfaced the ambiguity: the node
+demanded a spec signature while the coordinator only sent one when given a
+separate signing key, so every request 401'd. Resolved by making the signature
+**mandatory** and defaulting its secret to the transport secret — a node that
+ran unsigned specs whenever the field was absent would be one an attacker
+could use by omitting it.
+
+**No patient identifier crosses the boundary.** The coordinator sends a
+question; each node resolves which of its own patients it is about. A
+coordinator holding guids for every source is the arrangement the design
+exists to avoid, and the AN-7 scanner asserts it in `to_json()` output.
+
+**A source that did not answer is named as one** — timeout, refusal,
+unreachable, bad envelope, and an unexpected client exception all land in
+`failures` and become a degraded `SourceStatus` plus a note. The deliberate
+exception: when *no* node answered, `run_distributed` raises rather than
+returning a zero-source result, because that result renders as a page of
+suppressed cells and reads as a very small cohort rather than as nothing
+having run.
+
+### Found while building, not fixed here
+
+- **A node cannot derive a cohort from `spec.cohort`.** `run_spec()` never
+  reads the spec's inclusion criteria at all, and the CDR exposes no
+  criterion-search or patient-listing endpoint a node could use — its read
+  client needs the patient guids it would be meant to produce. Both predate
+  this ticket. `ConfiguredCohortSource` (operator pins the cohort per node) is
+  what a deployment gets today; the seam is real and the gap is written down
+  rather than closed with an invented endpoint. Ticketed.
+
+### Still open
+
+Gap G6 is untouched: this is verified against synthetic CDRs over real
+sockets, which exercises the wiring between coordinator and node but not the
+wiring to plan.pdhc, ips.pdhc or a deployed CDR.

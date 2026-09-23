@@ -184,6 +184,12 @@ def _public_path(path: str) -> bool:
         or path == "/healthz"
         or path == "/api/v1/health"
         or path.startswith("/static/")
+        # #684: the node surface is outside the SSO gate because its caller is
+        # a coordinator process, not a person — there is no session to
+        # validate. It is NOT unauthenticated: every request must carry an
+        # envelope sealed with the shared transport secret, and the route
+        # refuses before parsing the body. See app/transport/envelope.py.
+        or path.startswith("/api/v1/node/")
     )
 
 

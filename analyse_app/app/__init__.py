@@ -103,6 +103,38 @@ def create_app(config=None) -> Flask:
     # --- Consent join (ips.pdhc analysis-filter, research reads) ----------
     app.config.setdefault("IPS_BASE_URL", os.environ.get("IPS_BASE_URL", ""))
 
+    # --- Federation roles (#684 / AN-12) ----------------------------------
+    # ONE deployable runs either role; the role comes from config, not from a
+    # separate image. "both" is the local-dev default and is what the test
+    # harness uses; a real deployment sets one node per CDR plus one
+    # coordinator.
+    app.config.setdefault(
+        "ANALYSE_ROLE", os.environ.get("ANALYSE_ROLE", "both"))
+    # The shared secret sealing the coordinator<->node wire. Deliberately not
+    # defaulted: a transport secret with a fallback value ships to production
+    # working, and then the signature attests nothing.
+    app.config.setdefault(
+        "ANALYSE_TRANSPORT_SECRET",
+        os.environ.get("ANALYSE_TRANSPORT_SECRET", ""))
+    # Coordinator side: "<node_id>=<url>,..." or a mapping supplied by tests.
+    if "ANALYSE_NODES" not in app.config:
+        app.config["ANALYSE_NODES"] = os.environ.get("ANALYSE_NODES", "")
+    # Node side: this node's own policy file and pinned cohort.
+    app.config.setdefault(
+        "ANALYSE_NODE_POLICY", os.environ.get("ANALYSE_NODE_POLICY", ""))
+    app.config.setdefault(
+        "ANALYSE_NODE_COHORT", os.environ.get("ANALYSE_NODE_COHORT"))
+    app.config.setdefault(
+        "ANALYSE_ALLOW_LIVE_DATA",
+        os.environ.get("ANALYSE_ALLOW_LIVE_DATA", "").lower()
+        in ("1", "true", "yes"))
+    try:
+        app.config.setdefault(
+            "ANALYSE_NODE_TIMEOUT",
+            float(os.environ.get("ANALYSE_NODE_TIMEOUT", "60")))
+    except ValueError:
+        app.config.setdefault("ANALYSE_NODE_TIMEOUT", 60.0)
+
     db.init_app(app)
     # Import models so Alembic autogenerate + create_all see every table.
     from app import models  # noqa: F401
@@ -141,6 +173,13 @@ def create_app(config=None) -> Flask:
     app.register_blueprint(analyse_stats_bp)
     app.register_blueprint(analyse_canonical_bp)
     app.register_blueprint(analyse_openehr_bp)
+
+    # The node surface exists only where this deployment IS a node. A
+    # coordinator that also served /api/v1/node/run would be a second, quieter
+    # way into the data, reachable by anyone holding the transport secret.
+    if str(app.config.get("ANALYSE_ROLE", "both")).lower() in ("node", "both"):
+        from app.routes.node_api import bp as node_api_bp
+        app.register_blueprint(node_api_bp)
 
     register_export_audit_cli(app)
     # #644: `flask spec-schema` regenerates the JSON Schema artefact from the

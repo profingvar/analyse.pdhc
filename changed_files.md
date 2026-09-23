@@ -208,3 +208,23 @@
 - analyse_app/tests/test_phase4.py (new, 21)
 - analyse_app/tests/test_disclosure.py — updated for the advisory default
 - docs/analyse/decisions/0010-keyed-hash-linkage.md (new)
+
+## AN-12 (#684) — coordinator↔node transport, 2026-09-23
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/transport/__init__.py (new)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/transport/envelope.py (new)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/transport/client.py (new)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/coordinator/dispatch.py (new)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/coordinator/__init__.py
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/node/service.py (new)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/node/cohort_source.py (new)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/routes/node_api.py (new)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/__init__.py (role config + role-gated blueprint)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/auth.py (node path outside the SSO gate; envelope is the auth)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/cli_analyse.py (spec-run uses the real fan-out; --project)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/.env.example
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/nodeserver.py (new)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_transport.py (new)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_transport_e2e.py (new)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_node_api.py (new)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_cli_analyse.py (spec-run tests follow the real fan-out)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/analyse/decisions/0011-sealed-wire-between-coordinator-and-node.md (new)
