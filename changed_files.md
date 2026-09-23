@@ -127,3 +127,8 @@
 - analyse_app/app/privacy/coarsen.py (new) — day offsets, age bands, calendar grain
 - analyse_app/app/privacy/__init__.py (new)
 - analyse_app/tests/test_privacy.py (new, 57)
+
+## 2026-09-23 — #646 AN-3: disclosure control
+- analyse_app/app/privacy/disclosure.py (new) — k_min policy, primary+secondary suppression, safe summaries, differencing guard
+- analyse_app/app/privacy/__init__.py — export disclosure
+- analyse_app/tests/test_disclosure.py (new, 64 incl. 40 property tests)

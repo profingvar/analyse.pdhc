@@ -361,3 +361,59 @@ observation tables (gap G9).
 Test fixtures use obvious sentinels (`FORBIDDEN-PNR`, not a realistic
 personnummer) so that if one ever leaks, AN-7's scanner sees something
 unmistakable rather than something that merely looks like test data.
+
+---
+
+## 2026-09-23 — #646 (AN-3): disclosure control
+
+196 tests pass (+64). Runs twice by design: at the node before anything
+leaves, and at the coordinator after merging — a merge of two individually
+safe partials can be unsafe, and a node cannot see what the other nodes sent.
+
+**Secondary suppression is the ticket.** Blanking cells below `k_min` is the
+obvious half and the useless half: if a table publishes margins, one
+suppressed cell in a row is `total - sum(the rest)`, so suppressing it merely
+tells the reader where to look. Every row and column that has any suppression
+must carry at least two.
+
+**The bug I wrote first, and the fix.** The naive complement rule — suppress
+the smallest remaining cell — cascades. Suppressing a complement in a row can
+leave its column with exactly one, which the next sweep fixes, which leaves
+another line with one, until the whole table is blank. On the worked example
+it suppressed 6 cells of 6.
+
+The fix is to rank candidates by whether their CROSS line already holds a
+suppressed cell: such a complement satisfies the row and the column at once
+and terminates the cascade. Smallest-count is only the tie-break. Same
+example now suppresses 4 of 6 and keeps two real values. Over-suppression is a
+genuine cost, not a safe default — a table that blanks itself tells the
+analyst nothing and pushes them toward coarser questions.
+
+**Tested as an attack, not as output shape.** `_recover()` in the test file
+implements the subtraction attack and iterates to exhaustion, since solving
+one cell can expose another. It is run against 40 randomly generated tables;
+a single recovery is a real disclosure. There is also a test that the attack
+SUCCEEDS against naive primary-only suppression — otherwise the property test
+would be proving nothing.
+
+**Other decisions:**
+- `k_min` may be raised by a node, never lowered below its floor. A
+  coordinator must not be able to talk a node into disclosing more than the
+  organisation owning the data allows.
+- Merging policies takes the STRICTER of each, never an average and never the
+  coordinator's own: the merged result must satisfy every contributing node.
+- A true zero is not suppressed. It discloses nothing about an individual and
+  "nobody in this group" is often the finding.
+- Small histogram bins MERGE rather than drop — a dropped bin changes the
+  shape of the distribution silently; a merged one keeps every patient at
+  coarser resolution. Trailing bins merge backwards so no patient is lost at
+  either end.
+- True min and max are never published: each is one identifiable patient at
+  the edge of the distribution. A p5–p95 range replaces them.
+- A group comparison is released only when EVERY group passes — releasing the
+  ones that pass would disclose the one that did not, by difference.
+- The differencing guard records REFUSED probes too, or an attacker could
+  retry variations indefinitely, each compared only against those that
+  happened to be allowed. An identical rerun is allowed: difference zero
+  discloses nobody, and re-running a saved recipe must not look like an
+  attack. AN-18 hardens the rest.
