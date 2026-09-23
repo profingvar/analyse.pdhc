@@ -167,3 +167,10 @@
 - analyse_app/app/__init__.py — register the analyse CLI
 - analyse_app/tests/test_coordinator.py (new, 13)
 - analyse_app/tests/test_cli_analyse.py (new, 12)
+
+## 2026-09-23 — #652 AN-9: engine part 2
+- analyse_app/app/engine/compare_groups.py (new)
+- analyse_app/app/engine/over_time.py (new)
+- analyse_app/app/engine/completeness.py (new)
+- analyse_app/app/engine/__init__.py — registry extended to 7 kinds
+- analyse_app/tests/test_engine2.py (new, 20)

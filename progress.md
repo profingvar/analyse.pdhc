@@ -586,3 +586,40 @@ already sent on.
 `--dry-run` reads nothing at all and says so, returning suppressed counts per
 source. It exists so an analyst can size a cohort without running an analysis
 over it.
+
+---
+
+## 2026-09-23 — #652 (AN-9): engine part 2
+
+340 tests pass (+20). The registry now covers all seven analysis kinds.
+
+**compare_groups** — the node returns the describe partial per group, so
+Welch's t, the mean difference with CI and the standardised mean difference
+are all exact across sources. Verified against `scipy.ttest_ind(equal_var=
+False)` to 1e-9 over 1, 2 and 3 nodes.
+
+Effect size is reported **before** the p-value, and the SMD is what AN-13's
+Table 1 will show non-experts in preference to p-values. A p-value answers
+"would this difference be surprising if there were none", which is not the
+question a clinician asked.
+
+A small group suppresses the **whole** comparison — releasing the groups that
+pass would disclose the one that did not, by difference.
+
+**over_time** — bins are days since each patient's own index event, never
+calendar dates. AN-2 has already coarsened the calendar away, and a curve
+indexed on wall-clock time would leak the thing the offset exists to remove.
+Mismatched bins raise rather than silently producing a plausible curve.
+
+**completeness** — the least glamorous analysis and often the most useful.
+Per-patient observation counts leave the node as a **distribution**, not as
+per-patient numbers: sending the latter would be sending a per-patient
+dataset. `rows_by_author_org` works only because cdr #665 added
+`author_org_guid` this afternoon — before that, "who contributed this data"
+could only be answered as "who submitted it", a different question. Rows
+predating the column are reported as "(not recorded)" with an explanation
+rather than being silently folded in.
+
+Heavy missingness is called out in words: if more than half a variable's
+values are absent, the result says that any summary of it describes the
+patients who happened to be measured.
