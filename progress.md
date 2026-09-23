@@ -623,3 +623,36 @@ rather than being silently folded in.
 Heavy missingness is called out in words: if more than half a variable's
 values are absent, the result says that any summary of it describes the
 patients who happened to be measured.
+
+---
+
+## 2026-09-23 — #654 (AN-11): audit and node policy files
+
+350 tests pass (+10). Gate clean.
+
+**A group run has no single patient**, so `patient_guid` stays NULL and the
+run is identified by `spec_hash` — a new indexed column, because "which runs
+used this spec" is the question an auditor actually asks. The rest of the run
+detail goes in the existing `payload_snapshot` JSONB, which was designed for
+exactly this, rather than in five new columns.
+
+Migration `0002_audit_spec`, additive and nullable. Rows before today carry a
+`patient_guid` and no `spec_hash`; rows after carry the reverse. **A reader of
+this table must not assume either column is always present** — the same
+warning ADR-0007 gives.
+
+**Two logs, deliberately.** The platform log, so the run is visible where every
+other read is; and a **local log on each node**, so an organisation whose rows
+sit in someone else's CDR can still see that its data was used. The second is
+the one that is easy to skip and the one that matters most to the
+organisations the brief says must remain responsible for their own rows.
+
+**Counts are written suppressed.** An audit log is read by more people than a
+result is, and a per-source patient count of 3 discloses as much sitting in an
+audit row as it would in a table.
+
+A refused run is still logged — a refusal is a fact about who tried to read
+what.
+
+`docs/analyse/node-policy.md` is the operator's reference, and a test loads the
+example from it, so the documentation cannot drift into fiction.

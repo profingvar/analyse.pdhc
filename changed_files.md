@@ -174,3 +174,10 @@
 - analyse_app/app/engine/completeness.py (new)
 - analyse_app/app/engine/__init__.py — registry extended to 7 kinds
 - analyse_app/tests/test_engine2.py (new, 20)
+
+## 2026-09-23 — #654 AN-11: audit and node policy files
+- analyse_app/app/models/audit.py — spec_hash column
+- analyse_app/migrations/versions/0002_audit_spec_hash.py (new)
+- analyse_app/app/services/run_audit.py (new) — dual log, suppressed counts
+- analyse_app/tests/test_run_audit.py (new, 10)
+- docs/analyse/node-policy.md (new) — the operator's reference

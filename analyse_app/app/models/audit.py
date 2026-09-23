@@ -19,6 +19,8 @@ Columns:
   - ``session_id``      SSO ``sid`` for the operator session.
   - ``event_type``      'read' default (admin-override machinery reserved).
   - ``admin_justification`` verbatim admin text; NULL for non-override rows.
+  - ``spec_hash``       the analysis spec a group run executed (#654);
+    NULL for single-patient rows, which predate the group tool.
   - ``payload_snapshot``    per-event JSONB (X1 tuple: role_guid/purpose/
     access_basis, plus any route-supplied detail — e.g. export_id/cohort_id).
 """
@@ -58,6 +60,12 @@ class AnalyseAudit(db.Model):
     )
     admin_justification = db.Column(db.Text, nullable=True)
     payload_snapshot = db.Column(JSONB, nullable=True)
+    # #654: a GROUP run has no single patient, so patient_guid stays NULL and
+    # the run is identified by the spec that produced it. Indexed because
+    # "which runs used this spec" is the question an auditor actually asks;
+    # the rest of the run detail lives in payload_snapshot, which exists for
+    # exactly that.
+    spec_hash = db.Column(db.String(80), nullable=True, index=True)
 
     def to_dict(self) -> dict:
         return {
@@ -73,4 +81,5 @@ class AnalyseAudit(db.Model):
             "event_type": self.event_type,
             "admin_justification": self.admin_justification,
             "payload_snapshot": self.payload_snapshot,
+            "spec_hash": self.spec_hash,
         }
