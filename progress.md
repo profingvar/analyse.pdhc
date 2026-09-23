@@ -694,3 +694,49 @@ fixture. The scope is written into `app/testing/synth.py` so it is costed, not
 hand-waved. **The harness exercises the code path; a real stack exercises the
 wiring, and those are different risks.** AN-0's gap G6 asked for the latter to
 be confirmed and it still has not been.
+
+---
+
+## 2026-09-23 — Phase 3: the frontend (#655–#658)
+
+397 tests pass (+35). Gate clean. **ADR-0009: server-rendered, no JavaScript
+build chain** (operator decision).
+
+**That choice suits the brief rather than fighting it.** Charts are inline SVG
+built on the server, which means: the brief's ban on raw scatters is easy to
+hold because binning already happens server-side; suppressed cells render as
+`<5` because the renderer knows what was suppressed; WCAG 2.1 AA is simpler
+when a chart is markup with real text in it; and nothing can leak client-side
+because the client never receives the data, only the picture.
+
+**The method is derived, never chosen.** A user who has to pick between
+Pearson and Spearman has already been asked a statistics question, whatever
+the button says. Cards are phrased as questions and only *answerable* cards
+are offered — offering one that cannot run and failing afterwards is worse
+than not offering it, because the user has already committed to the question.
+
+**Sentences come from templates, and that is not a style preference.** A
+free-form sentence about a clinical result is a claim nobody reviewed,
+produced by something that does not know what it is allowed to say. A template
+is read once, argued about once, then trusted. Tests assert that no sentence
+in either language contains "effekt", "orsakar", "effect", "causes" or "leads
+to", and that effect size precedes any p-value.
+
+**Colour never carries meaning alone** — each series has a distinct dash as
+well as a hue, because roughly one man in twelve cannot separate the first two
+Okabe-Ito colours and print is often greyscale. A subcohort keeps its colour
+across every chart, which is only possible because the server assigns by group
+index.
+
+**A share link carries an id and nothing else.** A cohort definition is
+potentially identifying — "at this clinic, over 85, with this diagnosis" can
+describe one person — and a URL is pasted into chat, logged by proxies and
+kept in history. Suppressed cells export as `<k` in CSV too: exporting the
+real number "because it is only a CSV" is how a suppressed figure reaches a
+spreadsheet and then a slide.
+
+**Phase 3 is NOT accepted.** `docs/analyse/usability-test.md` defines the
+five-task walkthrough the brief requires and it **has not been run**. Unit
+tests can show a sentence never contains the word "causes"; they cannot show
+that a reader does not infer causation anyway. Five participants who match the
+target and have not seen the tool being built are what closes this phase.

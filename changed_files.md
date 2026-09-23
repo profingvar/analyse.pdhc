@@ -187,3 +187,15 @@
 - analyse_app/app/testing/__init__.py — export synth
 - analyse_app/app/cli_analyse.py — `flask synth`
 - analyse_app/tests/test_synth.py (new, 12)
+
+## 2026-09-23 — Phase 3 (#655 AN-12, #656 AN-13, #657 AN-14, #658 AN-15)
+- analyse_app/app/ui/palette.py (new) — Okabe-Ito, colour never alone
+- analyse_app/app/ui/charts.py (new) — inline SVG, server-rendered
+- analyse_app/app/ui/questions.py (new) — question cards, method derived
+- analyse_app/app/ui/sentences.py (new) — templated summaries, sv/en
+- analyse_app/app/ui/i18n.py (new) — Swedish default
+- analyse_app/app/ui/recipes.py (new) — recipes, CSV export, provenance rows
+- analyse_app/app/ui/__init__.py (new)
+- analyse_app/tests/test_ui.py (new, 35)
+- docs/analyse/usability-test.md (new) — the walkthrough, NOT YET RUN
+- docs/analyse/decisions/0009-server-rendered-frontend.md (new)
