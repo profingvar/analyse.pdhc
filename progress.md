@@ -549,3 +549,40 @@ block every real output.
 One test asserts the scanner fires on a **real engine result** carrying
 guid-shaped values, not only on crafted strings — otherwise it would prove
 nothing about the pipeline.
+
+---
+
+## 2026-09-23 — #651 (AN-8) coordinator, #649 (AN-6) CLI
+
+320 tests pass. Built in this order because the CLI's `run` goes through the
+coordinator; building the CLI first would have meant writing a throwaway path.
+
+**Signing is over the CANONICAL form** from AN-1, so it commits to the spec's
+*meaning* rather than to one serialisation — a node that re-serialises before
+verifying still gets the same bytes. Tested with a key-reordered spec.
+Constant-time comparison, so a node does not leak how close a forgery was.
+HMAC rather than public-key deliberately: coordinator and nodes are one
+deployment with a shared secret store and mTLS already establishes who is
+talking. A signature answers *is this the spec the coordinator approved*, not
+*who sent it*.
+
+**Three merge rules, each tested:**
+- An offline node **degrades that source**, it does not fail the run. Losing
+  Uppsala must not lose the Östergötland figures. Every source appears in the
+  result with its status, so a reader never sees a pooled number without
+  knowing what is in it.
+- A node whose policy forbids pooling is **excluded from the pooled figure**
+  and reported alone. Its organisation permitted a figure attributable to
+  them, not a contribution to someone else's total. Tested with an outlying
+  no-pool source that must not drag the pooled mean.
+- Disclosure runs **again** after merging, under the **strictest**
+  contributing policy — a merge of individually safe partials can be unsafe,
+  and no single node could have seen that.
+
+**The CLI refuses to print a result the scanner flags** (exit 3) rather than
+emitting something the gate would have caught later, in a file somebody had
+already sent on.
+
+`--dry-run` reads nothing at all and says so, returning suppressed counts per
+source. It exists so an analyst can size a cohort without running an analysis
+over it.

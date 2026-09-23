@@ -147,5 +147,8 @@ def create_app(config=None) -> Flask:
     # models, so the committed schema cannot drift from what it describes.
     from app.cli import register_spec_cli
     register_spec_cli(app)
+    # #649: the analyse CLI — validate, run, dry-run, sources.
+    from app.cli_analyse import register as register_analyse_cli
+    register_analyse_cli(app)
 
     return app

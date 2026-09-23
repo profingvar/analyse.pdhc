@@ -158,3 +158,12 @@
 - analyse_app/app/testing/__init__.py (new)
 - analyse_app/scripts/gate.sh (new) — runs the suite then scans its output; exit 1 on a hit
 - analyse_app/tests/test_harness.py (new, 47)
+
+## 2026-09-23 — #651 AN-8 coordinator, #649 AN-6 CLI
+- analyse_app/app/coordinator/signing.py (new) — HMAC over the canonical form
+- analyse_app/app/coordinator/merge.py (new) — fan-in, degradation, pooling rules
+- analyse_app/app/coordinator/__init__.py (new)
+- analyse_app/app/cli_analyse.py (new) — spec-validate / spec-canonical / spec-run / sources-list
+- analyse_app/app/__init__.py — register the analyse CLI
+- analyse_app/tests/test_coordinator.py (new, 13)
+- analyse_app/tests/test_cli_analyse.py (new, 12)

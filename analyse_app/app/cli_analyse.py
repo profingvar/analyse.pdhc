@@ -1,0 +1,132 @@
+"""`analyse-pdhc` command line (#649).
+
+The CLI and the UI both produce SPECS and both go through the coordinator;
+neither sends a free-form query to a node. So this is a thin thing on purpose
+— everything it does, the UI will do the same way.
+
+It never prints identifiers. `--dry-run` exists precisely so an analyst can
+size a cohort without running an analysis over it, and it returns suppressed
+counts per source and nothing else.
+"""
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+import click
+import yaml
+
+from app.privacy.disclosure import SUPPRESSED, DisclosurePolicy
+from app.spec import AnalysisSpec, canonical_json, spec_hash
+from app.testing import scan_object
+
+
+def load_spec(path: str) -> AnalysisSpec:
+    text = Path(path).read_text(encoding="utf-8")
+    blob = yaml.safe_load(text) if path.endswith((".yaml", ".yml")) \
+        else json.loads(text)
+    return AnalysisSpec.model_validate(blob)
+
+
+def _echo_validation_error(e: Exception) -> None:
+    """Field-level, in the order a reader would fix them."""
+    click.echo("This spec cannot run:", err=True)
+    errors = getattr(e, "errors", None)
+    if callable(errors):
+        for err in e.errors():
+            loc = ".".join(str(p) for p in err.get("loc", ())) or "(spec)"
+            click.echo(f"  {loc}: {err.get('msg')}", err=True)
+    else:
+        click.echo(f"  {e}", err=True)
+
+
+def register(app):
+    @app.cli.command("spec-validate")
+    @click.argument("path", type=click.Path(exists=True, dir_okay=False))
+    def spec_validate(path):
+        """Check a spec and print its hash. Runs nothing."""
+        try:
+            spec = load_spec(path)
+        except Exception as e:
+            _echo_validation_error(e)
+            raise SystemExit(2)
+        click.echo(f"valid: {spec.title}")
+        click.echo(f"purpose: {spec.purpose.value}")
+        click.echo(f"sources: {', '.join(spec.sources)}")
+        click.echo(f"analyses: {', '.join(a.type for a in spec.analyses)}")
+        click.echo(f"spec_hash: {spec_hash(spec)}")
+
+    @app.cli.command("spec-canonical")
+    @click.argument("path", type=click.Path(exists=True, dir_okay=False))
+    def spec_canonical(path):
+        """Print the canonical form the hash and signature are taken over."""
+        click.echo(canonical_json(load_spec(path)))
+
+    @app.cli.command("spec-run")
+    @click.argument("path", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--sources", default=None,
+                  help="Comma-separated subset of the spec's sources.")
+    @click.option("--out", type=click.Path(file_okay=False), default=None)
+    @click.option("--dry-run", is_flag=True,
+                  help="Suppressed counts per source only. Runs no analysis.")
+    def spec_run(path, sources, out, dry_run):
+        """Run a spec through the coordinator."""
+        from app.coordinator import combine
+
+        try:
+            spec = load_spec(path)
+        except Exception as e:
+            _echo_validation_error(e)
+            raise SystemExit(2)
+
+        wanted = [s.strip() for s in sources.split(",")] if sources else list(spec.sources)
+        unknown = set(wanted) - set(spec.sources)
+        if unknown:
+            click.echo(f"not in this spec's sources: {', '.join(sorted(unknown))}",
+                       err=True)
+            raise SystemExit(2)
+
+        if dry_run:
+            click.echo(f"dry run — {spec.title}")
+            click.echo(f"spec_hash: {spec_hash(spec)}")
+            for s in wanted:
+                # Nothing is read in a dry run; the count is what the
+                # coordinator would ask for, shown suppressed by default.
+                click.echo(f"  {s}: eligible patients {SUPPRESSED} "
+                           f"(not read — dry run)")
+            click.echo("No analysis was run and no data was read.")
+            return
+
+        result = combine(spec, node_runs=[], coordinator_version="0.1.0",
+                         failures={s: "no node configured in this build"
+                                   for s in wanted})
+        payload = result.to_json()
+
+        leaks = scan_object(payload, where="cli output")
+        if leaks:
+            # Refuse to print rather than emit something the gate would have
+            # caught later, in a file somebody had already sent on.
+            click.echo(f"refusing to print: {len(leaks)} identifier-like "
+                       f"values in the result", err=True)
+            raise SystemExit(3)
+
+        if out:
+            Path(out).mkdir(parents=True, exist_ok=True)
+            dest = Path(out) / "result.json"
+            dest.write_text(json.dumps(payload, indent=2, ensure_ascii=False),
+                            encoding="utf-8")
+            click.echo(f"wrote {dest}")
+        else:
+            click.echo(json.dumps(payload, indent=2, ensure_ascii=False))
+
+    @app.cli.command("sources-list")
+    def sources_list():
+        """Configured nodes and their status."""
+        endpoints = app.config.get("ANALYSE_NODES") or {}
+        if not endpoints:
+            click.echo("no nodes configured (ANALYSE_NODES is empty)")
+            return
+        for name, url in sorted(endpoints.items()):
+            click.echo(f"{name}\t{url}")
