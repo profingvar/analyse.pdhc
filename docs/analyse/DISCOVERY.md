@@ -78,8 +78,9 @@ clinical-context record (#302 widened it from 6), joined to the observation via
 `requesting_org_guid`, `provider_org_guid`, `requester_user_guid`,
 `received_at`, `source_service`.
 
-**Gap.** `requesting_org_guid` is *who ordered the data*, which is not the same
-as *who authored it*. The brief's "each organisation remains responsible for
+**Gap — RESOLVED 2026-09-23 (ADR-0006).** `requesting_org_guid` is *who ordered
+the data*, which is not the same as *who authored it*. The operator confirmed
+they are distinct and that `author_org_guid` must be added (#665, #666). The brief's "each organisation remains responsible for
 its own rows" and the node-policy question "may rows authored by other
 organisations stored in this CDR be used" both rest on an `author_org` that
 does not exist. **Proposal:** AN-0b should add a question — is
@@ -199,7 +200,7 @@ tested, because **Colima is down on this laptop** after the macOS 27 upgrade
 |---|---|---|
 | G1 | **A machine caller cannot declare a read purpose.** `analysis_consent._operator_blob` passes service-key callers through by design. | Ticket against `cdr.pdhc`: accept a declared secondary-use purpose from a registered analysis service. Use ips's existing enum. **Blocks AN-5.** |
 | G2 | **Consent is enforced in the analyse app, not at the read boundary**, with `purpose` hard-coded to `research`. | Move to the node (AN-5); make purpose a spec parameter (AN-1). |
-| G3 | **`author_org` does not exist.** Nearest is `requesting_org_guid` (who ordered ≠ who authored). | Operator question — added to AN-0b. Node policy "may rows authored by other orgs be used" cannot be built until this is settled. |
+| G3 | **`author_org` does not exist.** Nearest is `requesting_org_guid` (who ordered ≠ who authored). | **RESOLVED 2026-09-23** — operator: not the same field, add `author_org_guid`. Tickets #665 (cdr.pdhc) then #666 (gateway.pdhc). See [ADR-0006](decisions/0006-author-org-is-a-distinct-field.md). Still blocks AN-5's node policy until #665 lands. |
 | G4 | **Concept is not separately queryable** on the per-type FHIR tables; it is embedded in `code_canonical`. | Two predicate shapes per store. Document in AN-1; do not assume one. |
 | G5 | **The audit row is patient-centric**; a group run has no single patient. | Extend `AnalyseAudit` with purpose, spec_hash, sources, per-source suppressed counts (AN-11). |
 | G6 | **The brief's `purpose` vocabulary does not match the platform's.** `quality_followup` is not a real value. | Adopt ips's closed enum in the spec (AN-1). |
