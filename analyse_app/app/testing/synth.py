@@ -67,6 +67,7 @@ def _policy(node_id: str, **over) -> NodePolicy:
 def build(*, nodes: int = 3, patients: int = 2000, seed: int = 0,
           blocked_fraction: float = 0.02,
           obs_per_patient: tuple[int, int] = (1, 12),
+          concept: str = "x",
           **policy_over) -> list[SynthSource]:
     """N sources holding disjoint slices of one synthetic population."""
     rnd = random.Random(seed)
@@ -83,6 +84,11 @@ def build(*, nodes: int = 3, patients: int = 2000, seed: int = 0,
             for _ in range(rnd.randint(*obs_per_patient)):
                 rows.append({
                     "patient_guid": pid,
+                    # #696: real rows carry the concept, and cohort criteria
+                    # select on it. The harness lacked the field entirely,
+                    # which is why nothing noticed that spec.cohort was never
+                    # applied — there was nothing for it to match against.
+                    "concept": concept,
                     "value": round(level + rnd.gauss(0, 1.5), 4),
                     "unit": "L",
                     "effective_at": None,

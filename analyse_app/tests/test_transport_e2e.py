@@ -26,7 +26,7 @@ def _spec(**over):
     base = {
         "title": "PEF across sources", "purpose": "statistics",
         "sources": ["cdr1", "cdr2"],
-        "cohort": {"include": [{"observation": "value", "op": ">=", "value": 0}]},
+        "cohort": {"include": [{"observation": "x", "op": ">=", "value": 0}]},
         "variables": [{"name": "value", "from": "value", "agg": "mean"}],
         "analyses": [{"type": "describe", "vars": ["value"]}],
     }

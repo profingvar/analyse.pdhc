@@ -228,3 +228,12 @@
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_node_api.py (new)
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_cli_analyse.py (spec-run tests follow the real fan-out)
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/analyse/decisions/0011-sealed-wire-between-coordinator-and-node.md (new)
+
+## AN-13 (#696) — cohort criteria at the node, 2026-09-23
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/node/cohort_criteria.py (new)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/node/runner.py (step 6b)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/node/__init__.py
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/testing/synth.py (rows carry `concept`)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_cohort_criteria.py (new)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/{test_node,test_cli_analyse,test_node_api,test_transport_e2e}.py
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/analyse/decisions/0011-sealed-wire-between-coordinator-and-node.md

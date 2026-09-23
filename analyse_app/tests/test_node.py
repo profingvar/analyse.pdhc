@@ -196,7 +196,10 @@ class TestRunOrdering:
                     if r["patient_guid"] in set(patient_guids)]
 
     def _rows(self, n, start=0):
-        return [{"patient_guid": f"p{i}", "value": float(i)}
+        # `concept` is what cohort criteria select on (#696); real rows carry
+        # it and this fixture did not, which is part of why nothing noticed
+        # that spec.cohort was never applied.
+        return [{"patient_guid": f"p{i}", "concept": "x", "value": float(i)}
                 for i in range(start, start + n)]
 
     def test_blocked_patients_are_never_read_at_all(self):
@@ -254,3 +257,28 @@ class TestRunOrdering:
                      project_key=KEY, ips_base_url="http://ips",
                      cohort=["p1"])
         assert reader.asked_for is None
+
+
+class TestCohortIsAppliedAtTheNode:
+    """#696 — the candidate list is candidates, not the cohort."""
+
+    def test_the_candidate_list_is_narrowed_by_the_criteria(self):
+        from app.node import run_spec
+        from tests.test_node import _policy, _spec, KEY        # noqa: F401
+        rows = [{"patient_guid": f"p{i}", "concept": "x", "value": float(i)}
+                for i in range(10)]
+
+        class R:
+            def excluded_by_spärr(self, guids, ips_base_url):
+                return set()
+
+            def read_observations(self, *, purpose, patient_guids, **kw):
+                want = set(patient_guids)
+                return [r for r in rows if r["patient_guid"] in want]
+
+        # _spec()'s criterion is x >= 1, so p0 (value 0.0) must drop out.
+        run = run_spec(_spec(), _policy(), R(), project_key=KEY,
+                       ips_base_url="http://ips",
+                       cohort=[f"p{i}" for i in range(10)])
+        assert run.n_patients == 9
+        assert run.excluded["cohort"] == 1

@@ -852,3 +852,55 @@ having run.
 Gap G6 is untouched: this is verified against synthetic CDRs over real
 sockets, which exercises the wiring between coordinator and node but not the
 wiring to plan.pdhc, ips.pdhc or a deployed CDR.
+
+---
+
+## 2026-09-23 — AN-13 (#696): the cohort criteria are applied
+
+476 tests pass (+17). Gate clean.
+
+**`spec.cohort.include` was read by nothing on the node path.** `run_spec()`
+took a list of patient guids and computed over all of them, so a spec saying
+"TBSA >= 5" was, at the node, a spec that said nothing — and the figure came
+back labelled with a criterion that had never been applied. Not an error: a
+*wider population* than the analyst asked about, reported under their
+question.
+
+`app/node/cohort_criteria.py` now decides membership, applied in `run_spec`
+between coarsening and compute. The candidate list a node starts from is
+explicitly candidates; the cohort is derived from it, and the number dropped
+is reported as `excluded["cohort"]`.
+
+### Semantics, which are choices
+
+- **A criterion is satisfied if ANY of the patient's observations of that
+  concept satisfies it.** "Ever had TBSA >= 5" is how an inclusion criterion
+  reads clinically. Testing the *aggregated* value instead would make cohort
+  membership depend on the aggregation chosen for an unrelated variable, so
+  editing one part of a spec would silently change who is in the study.
+- **Criteria are ANDed** — the field is `include`.
+- **An unevaluable criterion is an error, never a pass.** An `age_band`
+  criterion is refused, because age is not projected into the rows a node
+  reads and ignoring it would compute over every age.
+
+### Two bugs found by building it
+
+1. **My own guard was ineffective.** It tested `"concept" in row`, but
+   `project()` fills every allowlisted field, so the key is present even when
+   the source supplied nothing. The cohort came back *empty* instead of
+   raising — which reads as "nobody qualifies" rather than "this node cannot
+   tell". Now tests the value.
+2. **The synthetic harness had no `concept` field at all.** That is part of
+   why nothing noticed `spec.cohort` was unused: there was nothing for a
+   criterion to match against. `synth.build()` now emits it.
+
+Also fixed a flaky assertion I wrote in the CLI tests — it asserted source
+order from a *concurrent* fan-out. The gate caught it.
+
+### Still open, and now an efficiency question rather than a correctness one
+
+A node reads its candidates' observations and decides membership afterwards.
+Narrowing the read itself needs the CDR to answer "which of your patients
+match this"; its FHIR search supports `code` and `date` but **no
+`value-quantity`**, so a value predicate cannot be pushed down. Specified for
+cdr.pdhc separately. `ConfiguredCohortSource` still supplies candidates.

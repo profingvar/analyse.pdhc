@@ -36,7 +36,7 @@ def _spec_payload():
     return {
         "spec": {
             "title": "t", "purpose": "statistics", "sources": ["cdr1"],
-            "cohort": {"include": [{"observation": "value", "op": ">=",
+            "cohort": {"include": [{"observation": "x", "op": ">=",
                                     "value": 0}]},
             "variables": [{"name": "value", "from": "value", "agg": "mean"}],
             "analyses": [{"type": "describe", "vars": ["value"]}],

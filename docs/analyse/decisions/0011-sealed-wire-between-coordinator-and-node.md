@@ -89,13 +89,13 @@ one deployable, role from configuration — is unchanged.
 
 ## What this does NOT settle
 
-**Cohort resolution.** A node still cannot derive a cohort from
-`spec.cohort.include`. Two separate things are missing, neither of them
-transport: `run_spec()` never reads the spec's inclusion criteria at all, and
-the CDR exposes no criterion-search or patient-listing endpoint a node could
-use. `ConfiguredCohortSource` — the operator pins the cohort per node — is what
-a real deployment gets today. Written down rather than papered over with an
-invented endpoint; ticketed separately.
+**Cohort resolution.** Half-closed by #696. `run_spec()` now applies
+`spec.cohort.include` at the node, so the list a node starts from is a
+*candidate* list and the cohort is derived from it. What remains is narrowing
+the candidate list itself: the CDR exposes no criterion-search endpoint, so a
+node still reads its candidates' observations and decides membership
+afterwards. That is an efficiency limit, not a correctness one, and
+`ConfiguredCohortSource` still supplies the candidates.
 
 **The real stack.** This is verified against synthetic CDRs over real sockets.
 Gap G6 — running it against deployed CDRs with plan.pdhc and ips.pdhc in the

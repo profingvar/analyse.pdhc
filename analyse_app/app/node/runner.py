@@ -10,6 +10,8 @@ out rather than implied:
                      the consent join runs and fails closed
     5. project     — allowlist, constructive
     6. coarsen     — quasi-identifiers narrowed
+    6b. cohort     — apply the spec's inclusion criteria (#696); the list the
+                     node started from is a CANDIDATE list, not the cohort
     7. compute     — sufficient statistics only
     8. suppress    — node-side disclosure control before anything leaves
     9. audit       — locally, so the owning organisation can see its own data
@@ -29,6 +31,7 @@ from app.privacy import ProjectKey, build_allowlist, project, pseudonymise
 from app.privacy.disclosure import DisclosurePolicy
 from app.spec import AnalysisSpec
 
+from . import cohort_criteria
 from .policy import NodePolicy, PolicyError
 from .reader import ConsentUnavailable, NodeReader
 
@@ -113,7 +116,21 @@ def run_spec(spec: AnalysisSpec, policy: NodePolicy, reader: NodeReader, *,
         enriched["source"] = policy.node_id
         projected.append(project(enriched, allowlist))
 
+    # 6b — COHORT. Until #696 the spec's inclusion criteria were read by
+    # nothing on this path, so a figure came back labelled with a criterion
+    # that had never been applied — a wider population than was asked about,
+    # reported under the analyst's question. The candidate list the node
+    # started from is exactly that: candidates.
+    projected, excluded_by_cohort = cohort_criteria.apply(projected, spec)
+    if excluded_by_cohort:
+        run.excluded["cohort"] = excluded_by_cohort
+
     run.n_patients = len({p["pid"] for p in projected if p.get("pid")})
+
+    if not projected:
+        run.notes.append(
+            "No patient at this source meets the cohort criteria.")
+        return run
 
     # 7 + 8 — compute, then suppress before anything leaves
     for analysis in spec.analyses:

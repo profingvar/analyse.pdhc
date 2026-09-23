@@ -44,7 +44,10 @@ def _run(app, args):
 def live_nodes(app, monkeypatch):
     """A coordinator app whose two sources are real nodes on real ports."""
     monkeypatch.setenv(f"ANALYSE_PROJECT_KEY_{PROJECT.upper()}", PROJECT_KEY)
-    sources = synth.build(nodes=2, patients=200, seed=11)
+    # the GOOD spec selects on tbsa_percent, so the synthetic sources
+    # must carry that concept — cohort criteria are applied now (#696)
+    sources = synth.build(nodes=2, patients=200, seed=11,
+                          concept="tbsa_percent")
     started = [Node(s) for s in sources]
     app.config["ANALYSE_NODES"] = {n.node_id: n.base_url for n in started}
     app.config["ANALYSE_TRANSPORT_SECRET"] = SECRET
@@ -120,8 +123,10 @@ class TestRun:
         assert r.exit_code == 0, r.output
         blob = json.loads((out / "result.json").read_text())
         assert blob["provenance"]["spec_hash"].startswith("sha256:")
-        assert [s["source"] for s in blob["sources"] if s["ok"]] == ["cdr1",
-                                                                    "cdr2"]
+        # sorted: the fan-out is concurrent, so arrival order is not
+        # deterministic and asserting it would be a flaky test, not a check
+        assert sorted(s["source"] for s in blob["sources"] if s["ok"]) == \
+            ["cdr1", "cdr2"]
 
     def test_unreachable_sources_are_reported_not_hidden(self, app, spec_file):
         """Every source in the spec must appear in the output, with a reason.
