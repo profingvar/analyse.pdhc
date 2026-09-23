@@ -132,3 +132,15 @@
 - analyse_app/app/privacy/disclosure.py (new) — k_min policy, primary+secondary suppression, safe summaries, differencing guard
 - analyse_app/app/privacy/__init__.py — export disclosure
 - analyse_app/tests/test_disclosure.py (new, 64 incl. 40 property tests)
+
+## 2026-09-23 — #647 AN-4: engine part 1
+- analyse_app/app/engine/base.py (new) — Partial/Result, the three-function contract
+- analyse_app/app/engine/sketch.py (new) — t-digest + protect() against singleton centroids
+- analyse_app/app/engine/describe.py (new)
+- analyse_app/app/engine/histogram.py (new)
+- analyse_app/app/engine/frequency.py (new)
+- analyse_app/app/engine/correlation.py (new)
+- analyse_app/app/engine/__init__.py (new) — REGISTRY
+- analyse_app/requirements.txt — scipy>=1.14
+- analyse_app/tests/test_engine.py (new, 30)
+- docs/analyse/decisions/0008-no-dataframe-engine-yet.md (new)

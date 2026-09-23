@@ -9,3 +9,7 @@ requests>=2.31
 # #644: analysis spec models + JSON Schema generation.
 # Verified to have a Python 3.14 wheel (ADR-0004 asks for that check).
 pydantic>=2.7
+# #647: reference distributions (t, chi-square) only — not computation
+# over data. Verified to have a Python 3.14 wheel. See ADR-0008 for why
+# there is no Polars or DuckDB here.
+scipy>=1.14

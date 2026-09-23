@@ -417,3 +417,57 @@ would be proving nothing.
   happened to be allowed. An identical rerun is allowed: difference zero
   discloses nobody, and re-running a saved recipe must not look like an
   attack. AN-18 hardens the rest.
+
+---
+
+## 2026-09-23 — #647 (AN-4): engine part 1
+
+226 tests pass (+30). describe, histogram, frequency, correlation, each as
+`local` / `merge` / `finalize`.
+
+**A real privacy bug, found by my own test.** The first version shipped
+t-digest centroids of weight 1 in the partial — and a centroid of weight 1 is
+one patient's exact value crossing the wire. t-digest deliberately keeps tail
+centroids small, because that is what makes tail quantiles accurate; the
+consequence is that the most extreme patients, the ones disclosure control
+works hardest to protect, were precisely the ones sitting alone in a centroid.
+
+`TDigest.protect(k_min)` now merges centroids until none describes fewer than
+`k_min` patients, and `describe.local` applies it **before** the partial
+leaves the node. The cost is tail resolution, which is aligned with the rest
+of the design rather than a loss — AN-3 already refuses to publish true minima
+and maxima and reports a p5–p95 range instead. There is a regression test
+asserting no centroid falls below the floor, and one asserting three
+distinctive values never appear in a serialised partial.
+
+**Exactness is a property of the federation, not of the maths.** Mean, SD, CI,
+cell counts, chi-square and Pearson are exact when merged, because they are
+functions of sums. Median, IQR and cross-node Spearman are not, and say so on
+the result rather than in a comment — a reader cannot tell by looking. Single
+node Spearman is exact; two-node Spearman is a weighted average of per-node
+coefficients and is labelled as such.
+
+Verified against SciPy to 1e-9: mean, SD, the t-based CI, chi-square, and
+Pearson across 1, 2 and 4 nodes.
+
+**Other decisions:**
+- Histogram bin edges are fixed by the COORDINATOR. If nodes chose their own
+  from their own data the counts would not be addable and the merged
+  histogram would be a picture of nothing. Mismatched edges raise rather than
+  silently produce a plausible chart.
+- `propose_edges` uses inner quantiles, not min/max: a range stretched to an
+  outlier gives a histogram of empty bins and one spike, and the extremes are
+  single patients.
+- Correlation is pairwise-complete, so a patient missing one variable still
+  contributes to the pairs they do have.
+- Missing is carried explicitly at every stage. A mean over 40 of 200 patients
+  and a mean over 200 of 200 are different claims.
+- Result notes are plain language and never say "effect" or "causes"; there
+  are tests asserting the absence of both words.
+
+**ADR-0008: no Polars, no DuckDB.** All three candidates have Python 3.14
+wheels, so this is not an availability decision. A node computes sufficient
+statistics — one linear pass, no joins, no columnar scans — and the read
+dominates it. SciPy is used only for distribution functions, not computation
+over data. The ADR records what would change the decision, with numbers
+required.
