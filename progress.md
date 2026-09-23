@@ -303,3 +303,61 @@ the drift is invisible until a spec validates here and fails at the node.
 
 **New dependency:** pydantic>=2.7. Verified to have a Python 3.14 wheel, the
 check ADR-0004 asks for (2.13.5 installs clean).
+
+---
+
+## 2026-09-23 — #645 (AN-2): privacy layer
+
+132 tests pass (+57). The boundary that decides what can physically leave a
+node.
+
+**Projection is CONSTRUCTIVE, not a filter.** The output record is built field
+by field from the allowlist; the input is never copied and then cleaned. A
+blocklist fails open — the day the CDR grows a column nobody anticipated, a
+filter passes it through and a projection does not. There is a test for
+exactly that: a record with a `newly_added_column` full of PII, asserted
+absent. This is the whole reason the brief says allowlist and never blocklist.
+
+The allowlist is **derived from the spec**, not configured: a field is
+projectable because a declared variable reads it, or because the engine
+structurally needs it. `NEVER_PROJECTABLE` exists so that an attempt to allow
+one fails loudly here rather than succeeding quietly downstream — including
+`patient_guid` itself, which is pseudonymised before anything else runs.
+
+**Pseudonyms are per project.** `HMAC-SHA256(project_key, patient_guid)`
+truncated to 16 hex chars (64 bits; the birthday bound puts a collision around
+2^32 patients, far past any cohort here). HMAC rather than a plain hash
+because a GUID is drawn from a small enumerable space and an unkeyed digest of
+one is reversible by brute force in seconds. Per-project keys are what stop a
+pseudonym being a lifelong identifier joinable across every analysis anyone
+ever ran.
+
+`ProjectKey` refuses to render itself — `__repr__` and `__str__` return
+`<ProjectKey … redacted>`, and `__hash__` uses the project id only. Keys reach
+logs by the dullest possible route: someone formats a config object, or an
+exception carries locals. This is a floor under that, not a substitute for
+keeping keys out of logs. Keys load from the secret store via env, never from
+the spec — the spec is signed and travels between services, so anything in it
+is visible to every node it reaches.
+
+**There is no inverse function and none should be added.**
+
+**Coarsening is on by default** and every function narrows; a caller must pass
+an explicit granularity to widen, and none can be turned off. Dates become day
+offsets from the index event — a calendar date plus a diagnosis often
+identifies someone, while "day 14 after injury" is what the analysis actually
+needed. Calendar time has month and year granularity and deliberately no DAY.
+Age becomes a band with an **open-ended 90+** top, because the bands thin out
+fast up there and an exact 97 in one region is close to an identifier on its
+own. `birth_date()` exists purely to raise — so that reaching for it fails
+loudly instead of someone calling `calendar(dob, year)` and getting a
+plausible-looking answer.
+
+**Discovery simplified this ticket.** The brief's "if a CDR keys patients by
+personnummer, map to the GUID locally" branch was not built: AN-0 established
+the platform is GUID-keyed throughout and holds no personnummer in the CDR
+observation tables (gap G9).
+
+Test fixtures use obvious sentinels (`FORBIDDEN-PNR`, not a realistic
+personnummer) so that if one ever leaks, AN-7's scanner sees something
+unmistakable rather than something that merely looks like test data.

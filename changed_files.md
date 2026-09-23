@@ -120,3 +120,10 @@
 - analyse_app/requirements.txt — pydantic>=2.7
 - analyse_app/tests/test_spec.py (new, 32)
 - docs/analyse/analysis-spec-v1.schema.json (new, generated artefact)
+
+## 2026-09-23 — #645 AN-2: privacy layer
+- analyse_app/app/privacy/projection.py (new) — constructive allowlist projection
+- analyse_app/app/privacy/pseudonym.py (new) — per-project HMAC pseudonyms, ProjectKey
+- analyse_app/app/privacy/coarsen.py (new) — day offsets, age bands, calendar grain
+- analyse_app/app/privacy/__init__.py (new)
+- analyse_app/tests/test_privacy.py (new, 57)
