@@ -126,7 +126,6 @@ def create_app(config=None) -> Flask:
         register_export_audit_cli,
     )
     # #291 — gateway-facing federated observations search.
-    from app.routes.clinical import bp as clinical_bp
     from app.analyse.observations_search import bp as observations_search_bp
     # #292 — federated auxiliary endpoints (row-count stats, canonical-table
     # query, openEHR composition search).
@@ -138,7 +137,6 @@ def create_app(config=None) -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(views_bp)
     app.register_blueprint(researcher_bp)
-    app.register_blueprint(clinical_bp)
     app.register_blueprint(observations_search_bp)
     app.register_blueprint(analyse_stats_bp)
     app.register_blueprint(analyse_canonical_bp)

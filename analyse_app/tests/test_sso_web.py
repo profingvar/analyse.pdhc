@@ -114,14 +114,28 @@ def test_landing_redirects_to_login_when_no_session(sso_client):
 
 
 def test_landing_renders_with_valid_session(sso_client, monkeypatch):
-    # #578: the landing is now the org-scoped "choose patient" list; the
-    # cohort/research workspace moved to /researcher.
+    # #663 / ADR-0001: analyse.pdhc is the GROUP analysis tool, so the landing
+    # is the cohort workspace. It was briefly the org-scoped "choose patient"
+    # list (#578); individual-patient analysis belongs to dashboard.pdhc.
     monkeypatch.setattr("app.auth.validate_sso_token", lambda t: _GOOD_BLOB)
     with sso_client.session_transaction() as sess:
         sess["sso_token"] = "tok-live"
     r = sso_client.get("/")
     assert r.status_code == 200
-    assert b"choose patient" in r.data
+    assert b"Researcher workspace" in r.data
+
+
+def test_no_individual_patient_route_survives(sso_client, monkeypatch):
+    """#663: the individual-patient surfaces are gone, not merely unlinked.
+
+    A route that still answers is a route someone can still reach, so this
+    asserts on the URL map rather than on navigation."""
+    monkeypatch.setattr("app.auth.validate_sso_token", lambda t: _GOOD_BLOB)
+    rules = {str(r) for r in sso_client.application.url_map.iter_rules()}
+    for gone in ("/patient/<guid>", "/admin/sparr-log"):
+        assert gone not in rules, f"{gone} still routable"
+    assert not any(r.startswith("/api/patient") or r.startswith("/api/patients")
+                   for r in rules), "a clinical patient API is still routable"
 
 
 def test_researcher_workspace_still_available(sso_client, monkeypatch):
