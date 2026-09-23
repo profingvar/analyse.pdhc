@@ -471,3 +471,43 @@ statistics — one linear pass, no joins, no columnar scans — and the read
 dominates it. SciPy is used only for distribution functions, not computation
 over data. The ADR records what would change the decision, with numbers
 required.
+
+---
+
+## 2026-09-23 — #648 (AN-5): the node
+
+248 tests pass (+22). Unblocked by cdr #664 and #665, both landed today.
+
+**The order of operations is the security argument**, so `runner.py` writes it
+out rather than implying it: policy → data_mode → spärr → read → project →
+coarsen → compute → suppress → audit. Every step before `compute` can only
+reduce what is computed over.
+
+The one that matters: **spärr runs BEFORE the read, not as a filter after**.
+An aggregate computed over a blocked patient has already used their data, even
+if the number is discarded afterwards. There is a test asserting blocked
+patients never appear in what the node asks the CDR for.
+
+**The node declares its purpose** (`X-Access-Purpose`, plus
+`X-Research-Project-Guids` for research) — the header cdr #664 added this
+afternoon. Without it the CDR passes machine callers through unfiltered, which
+for an analysis node means reading data a patient objected to.
+
+**Everything fails closed.** A 503 from the CDR (its own consent filter down)
+propagates. Spärr unreachable means *every* patient is treated as blocked, not
+none — and that catch is deliberately broad, so a caller handling
+`ConsentUnavailable` does not also need a bare `except` to stay safe.
+
+**Policy is owned by the organisation behind the CDR and the coordinator
+cannot override it.** A coordinator asking for a lower `k_min` silently gets
+the node's; asking for stricter gets what it asked. A policy with no stated
+purposes answers *nothing* — the correct posture for a file someone forgot to
+fill in. An unknown key fails the load rather than being ignored, because a
+typo is a control the organisation believes it has and does not.
+
+`may_use_other_orgs_rows` is implementable at all only because cdr #665 added
+`author_org_guid` this afternoon. It defaults to **no**.
+
+**`data_mode` defaults to synthetic** and live requires an explicit
+`allow_live`. It must not be possible to point this at real patients by
+forgetting a flag.

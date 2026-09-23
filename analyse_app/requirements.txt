@@ -13,3 +13,5 @@ pydantic>=2.7
 # over data. Verified to have a Python 3.14 wheel. See ADR-0008 for why
 # there is no Polars or DuckDB here.
 scipy>=1.14
+# #648: node policy files, owned by the organisation behind each CDR.
+PyYAML>=6.0

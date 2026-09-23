@@ -144,3 +144,11 @@
 - analyse_app/requirements.txt — scipy>=1.14
 - analyse_app/tests/test_engine.py (new, 30)
 - docs/analyse/decisions/0008-no-dataframe-engine-yet.md (new)
+
+## 2026-09-23 — #648 AN-5: node service
+- analyse_app/app/node/policy.py (new) — NodePolicy, owned by the CDR's organisation
+- analyse_app/app/node/reader.py (new) — read client, declares purpose, fails closed
+- analyse_app/app/node/runner.py (new) — the ordered execution path
+- analyse_app/app/node/__init__.py (new)
+- analyse_app/requirements.txt — PyYAML
+- analyse_app/tests/test_node.py (new, 22)
