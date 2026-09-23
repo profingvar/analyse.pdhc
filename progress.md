@@ -656,3 +656,41 @@ what.
 
 `docs/analyse/node-policy.md` is the operator's reference, and a test loads the
 example from it, so the documentation cannot drift into fiction.
+
+---
+
+## 2026-09-23 — #653 (AN-10): synthetic multi-source environment
+
+362 tests pass (+12). Gate clean.
+
+`flask synth --nodes 3 --patients 2000 [--spec …]` builds N sources and drives
+the **real** node path on each — policy check, spärr, read, pseudonymise,
+project, coarsen, compute, suppress — then merges with the **real**
+coordinator. Only the transport is substituted.
+
+This is the first test of the *whole* loop rather than of a layer.
+`TestFederatedEqualsPooledOnSyntheticData` re-proves AN-7's property through
+node and coordinator rather than on the engine alone, which is a stronger
+claim: it would catch a projection or suppression step that silently changed
+a number.
+
+**Synthetic ids are deliberately unmistakable.** Patients are `TEST-P…`, a
+shape the AN-7 scanner flags on sight, so synthetic data reaching a real
+output is caught rather than blending in. Tested that the generator produces
+no names, addresses or personnummer-shaped values — the generator must not be
+the thing that puts a realistic identifier into a fixture.
+
+**What this does NOT do, stated rather than implied: it does not stand up
+containerised CDRs.** A real multi-CDR stack additionally needs one cdr.pdhc
+container plus Postgres per source, plan.pdhc reachable for concepts and
+units, ips.pdhc reachable for spärr and the consent verdict (both fail closed,
+so with ips absent a real node reads nothing at all and the stack is
+all-or-nothing), a registered service key per CDR, and seeding — for which
+sim.pdhc already generates synthetic longitudinal data from real
+PlanDefinitions.
+
+That is most of the platform, which is why it is deployment work rather than a
+fixture. The scope is written into `app/testing/synth.py` so it is costed, not
+hand-waved. **The harness exercises the code path; a real stack exercises the
+wiring, and those are different risks.** AN-0's gap G6 asked for the latter to
+be confirmed and it still has not been.

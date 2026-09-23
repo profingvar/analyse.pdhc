@@ -121,6 +121,37 @@ def register(app):
         else:
             click.echo(json.dumps(payload, indent=2, ensure_ascii=False))
 
+    @app.cli.command("synth")
+    @click.option("--nodes", default=3, show_default=True)
+    @click.option("--patients", default=2000, show_default=True)
+    @click.option("--seed", default=0, show_default=True)
+    @click.option("--spec", "spec_path", default=None,
+                  type=click.Path(exists=True, dir_okay=False),
+                  help="Run this spec against the synthetic sources.")
+    def synth_cmd(nodes, patients, seed, spec_path):
+        """Build a synthetic multi-source environment and optionally run a spec.
+
+        This drives the REAL node and coordinator code with synthetic data.
+        It does not stand up containerised CDRs — see app/testing/synth.py for
+        what that additionally requires.
+        """
+        from app.testing import synth
+
+        sources = synth.build(nodes=nodes, patients=patients, seed=seed)
+        click.echo(f"{len(sources)} synthetic sources, seed {seed}:")
+        for s in sources:
+            click.echo(f"  {s.node_id}: {len(s.rows)} observations, "
+                       f"{len(s.blocked)} patients blocked")
+        if not spec_path:
+            return
+        result = synth.run(load_spec(spec_path), sources)
+        for s in result.sources:
+            click.echo(f"  {s.source}: {'ok' if s.ok else 'FAILED'} "
+                       f"({s.n_patients} patients)")
+        for r in result.results:
+            click.echo(f"  {r['kind']}: {r['exactness']}")
+        click.echo(f"spec_hash: {result.provenance['spec_hash']}")
+
     @app.cli.command("sources-list")
     def sources_list():
         """Configured nodes and their status."""

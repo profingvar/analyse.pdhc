@@ -181,3 +181,9 @@
 - analyse_app/app/services/run_audit.py (new) — dual log, suppressed counts
 - analyse_app/tests/test_run_audit.py (new, 10)
 - docs/analyse/node-policy.md (new) — the operator's reference
+
+## 2026-09-23 — #653 AN-10: synthetic multi-source environment
+- analyse_app/app/testing/synth.py (new) — N sources through the real node + coordinator path
+- analyse_app/app/testing/__init__.py — export synth
+- analyse_app/app/cli_analyse.py — `flask synth`
+- analyse_app/tests/test_synth.py (new, 12)
