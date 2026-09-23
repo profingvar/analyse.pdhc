@@ -1,6 +1,7 @@
 # ADR-0005 — one deployable, running either role by configuration
 
 Status: accepted · Date: 2026-09-23 · Decided by: operator · Ticket: #643 q4
+(topology confirmed same day — see the closing section)
 
 ## Context
 
@@ -44,10 +45,10 @@ Port allocation inside the existing block:
 - The single-CDR case is genuinely the federated case with one node, as the
   brief requires. There is no second code path to keep honest.
 
-### Still open: how many node instances
+### Topology: one node instance per CDR — decided
 
-"One deployable" settles packaging, not topology. The recommendation, to be
-confirmed before AN-5:
+"One deployable" settles packaging, not topology. The operator confirmed the
+topology separately:
 
 **One node instance per CDR**, not one node multiplexed across CDRs.
 
@@ -64,3 +65,17 @@ Today every CDR is a container on one Docker VM on miserver, so "beside the
 CDR" is notional. That is a fact about the current deployment, not a licence to
 assume co-location: the code must work when Uppsala and Östergötland are
 genuinely separate hosts, because that is the case the federation exists for.
+
+Binding consequences of that, for AN-5 and AN-8:
+
+- A node is configured for **exactly one** CDR endpoint. It must not grow a
+  list of them, however convenient that becomes when all six sit on one VM.
+- Policy file and local audit log are **per node**, therefore per CDR,
+  therefore per organisation. There is no shared policy store.
+- The coordinator discovers nodes from configuration and treats each as an
+  independent, individually failable peer. One node offline degrades that
+  source in the per-source results; it does not fail the run.
+- Deployment on miserver today means one coordinator on 9110 and up to seven
+  node processes on 9112-9118, all on the same host. Tests must not assume
+  that: the federation property tests split data across 1-5 nodes precisely so
+  co-location is never load-bearing.
