@@ -904,3 +904,51 @@ Narrowing the read itself needs the CDR to answer "which of your patients
 match this"; its FHIR search supports `code` and `date` but **no
 `value-quantity`**, so a value predicate cannot be pushed down. Specified for
 cdr.pdhc separately. `ConfiguredCohortSource` still supplies candidates.
+
+---
+
+## 2026-09-24 — AN-14 (#701) is blocked on a judgement, not on code
+
+Investigated before starting the push-down and stopped. Recording the finding
+so the next person does not re-derive it.
+
+**The push-down cannot honour "spärr before read" as things stand.**
+
+`run_spec`'s ordering — spärr excludes blocked patients *before* any read — is
+the security argument, not a detail: an aggregate computed over a blocked
+patient has used their data even if the number is discarded. A
+candidate-narrowing query is itself a read.
+
+Three facts establish the problem:
+
+1. **cdr's FHIR search applies consent but NOT spärr.** `fhir_read.search()`
+   runs `_consent_filter` (#422) and `check_patient_allowed`; nothing on that
+   path consults ips blocks. Spärr lives on the node
+   (`reader.excluded_by_spärr`).
+2. So a candidate query returns **blocked patients' rows to the node**, before
+   the node has excluded them.
+3. The obvious workaround — send an allow-list of already-spärr-filtered
+   patients — does not work either: `search()` reads `patient` with
+   `request.args.get`, singular, so one patient per query.
+
+### The fork, which is not mine to pick
+
+- **(a)** Teach cdr's search path to apply spärr. A cdr change, and it would
+  need ips reachable on every search — which changes that endpoint's failure
+  mode platform-wide.
+- **(b)** Accept that a candidate query reads blocked patients and discards
+  them. That is precisely what the codebase refuses to do for aggregates, so
+  it is a DPO-level judgement, not an engineering preference.
+- **(c)** Support a repeated `patient=` (or a `_has`-style patient filter) so
+  the node can pass a spärr-filtered allow-list. Smallest cdr change; keeps
+  the ordering intact.
+- **(d)** Leave it. `ConfiguredCohortSource` stays, the node reads its
+  candidates and filters locally, and #698's `value-quantity` serves other
+  FHIR clients rather than the node.
+
+**(c) looks right to me** — it preserves the ordering rather than arguing
+about it, and it is a small, well-understood change. But it is still a cdr
+change plus a consent/ordering call, so it is being raised rather than taken.
+
+Nothing about #696 changes either way: cohort criteria are applied at the
+node today and the result is correct, just not cheap.

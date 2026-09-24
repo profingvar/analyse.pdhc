@@ -13,6 +13,14 @@ Live at analyse.pdhc.se is still 0.2.0-reform (deployed 2026-09-03).
 - #688 Phase 3 usability walkthrough (acceptance outstanding).
 - #687 gap G9 — keyed_hash has no identifier source. A decision, not code.
 
+## AN-14 (#701) is blocked on a judgement, not on code
+The cohort push-down cannot honour "spärr before read": cdr's FHIR search
+applies consent but not spärr, so a candidate query would hand the node
+blocked patients' rows before the node excludes them — and `patient=` is
+single-valued, so an allow-list cannot be passed either. Four options in
+progress.md (2026-09-24); (c) a repeated `patient=` on cdr looks right.
+Needs a decision, not more code.
+
 ## Carried gap from AN-12
 A node cannot derive its cohort from `spec.cohort.include`:
 `run_spec()` never reads the inclusion criteria, and the CDR has no
