@@ -1,7 +1,7 @@
 # analyse.pdhc — current focus
 
-Reconstruction Phases 1–4 + AN-12 (the coordinator↔node wire) are BUILT.
-459 tests, gate clean. HEAD is local-only — none of it is deployed.
+Reconstruction Phases 1–4 + AN-12 (the wire) + AN-13 (cohort criteria)
+are BUILT. 476 tests, gate clean. HEAD is local-only — none of it is deployed.
 Live at analyse.pdhc.se is still 0.2.0-reform (deployed 2026-09-03).
 
 ## Next
