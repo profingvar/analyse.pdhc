@@ -984,3 +984,26 @@ basis, and that design honoured.
 
 Nothing in the application imported the module — only the tests did — so
 removal touched no live path.
+
+---
+
+## 2026-09-24 — #700: decided — leave it, revisit after #685
+
+Operator decision. The federated endpoints (#291 gateway proxy, #292 monitor)
+keep today's behaviour: they neither join consent locally nor declare a
+purpose, so the CDRs pass them through.
+
+**Deliberate, and the reasoning is worth keeping.** The reconstruction is not
+deployed, and its node reader — which *does* declare a purpose — is the
+intended consumer of the gates built in #664 and #699. Settling the policy
+before that path is live would be deciding about traffic that is about to
+change shape.
+
+**What this leaves open, stated plainly so it is not mistaken for closed:**
+on the currently-live federated path neither side applies the analysis
+consent join. Spärr is unaffected — blocking is applied unconditionally on
+every CDR. What passes unfiltered is the analysis opt-out and per-project
+research consent.
+
+**#700 stays OPEN** as the reminder, and #685 should not be considered done
+until it is revisited.
