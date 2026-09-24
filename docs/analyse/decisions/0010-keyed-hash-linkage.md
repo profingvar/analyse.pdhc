@@ -1,6 +1,31 @@
 # ADR-0010 — keyed_hash linkage, gated and limited to counting
 
-Status: accepted · Date: 2026-09-23 · Ticket: #660 (AN-17)
+Status: **RETIRED 2026-09-24** (was accepted 2026-09-23) · Tickets: #660
+(AN-17), retired by #687
+
+> ## Retired — the mode is gone, this record is not
+>
+> `keyed_hash` was removed from the `Linkage` enum on 2026-09-24 by operator
+> decision (#687). `app/privacy/linkage.py` and its tests are deleted; a spec
+> naming `keyed_hash` now fails validation.
+>
+> **Why.** It shipped as a tested mechanism that could not be used. The CDR
+> holds no personnummer, the ips token path was never specified, and the
+> legal basis was never established. Keeping it behind a flag meant a control
+> that *looked* like a feature — and "shipped but unusable" is how something
+> gets switched on by someone who did not read this file.
+>
+> **What is kept, and why this ADR stays.** The design below is the record of
+> how it would have to work if it is ever wanted: the one-set-operation
+> boundary (`deduplicated_count` returns a number, deliberately not the
+> union, the overlap, or which tokens matched), and above all that **the key
+> is held by the nodes and never the coordinator** — a coordinator holding it
+> could compute tokens for any identity it guessed and test them against what
+> the nodes returned, turning a deduplication token into an identity oracle.
+> Anyone reviving this starts here, not from scratch.
+>
+> Reviving it needs all three of: an ips-side token path, a documented legal
+> basis, and this design honoured.
 
 ## Context
 

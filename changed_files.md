@@ -237,3 +237,10 @@
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_cohort_criteria.py (new)
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/{test_node,test_cli_analyse,test_node_api,test_transport_e2e}.py
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/analyse/decisions/0011-sealed-wire-between-coordinator-and-node.md
+
+## #687 — keyed_hash retired, 2026-09-24
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/spec/models.py
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/privacy/linkage.py (DELETED)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_phase4.py
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/analyse/analysis-spec-v1.schema.json (regenerated)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/analyse/decisions/0010-keyed-hash-linkage.md (RETIRED)

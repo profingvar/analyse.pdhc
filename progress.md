@@ -952,3 +952,35 @@ change plus a consent/ordering call, so it is being raised rather than taken.
 
 Nothing about #696 changes either way: cohort criteria are applied at the
 node today and the result is correct, just not cheap.
+
+---
+
+## 2026-09-24 — #687: keyed_hash linkage retired
+
+467 tests pass (−9, the keyed_hash tests went with the mode). Gate clean.
+
+Operator decision: **retire the mode, keep ADR-0010 as the record.**
+
+`keyed_hash` is removed from the `Linkage` enum, `app/privacy/linkage.py` and
+its tests are deleted, and the committed JSON schema is regenerated — the
+schema now offers `shared_guid` and `none` only, so a spec naming
+`keyed_hash` fails validation rather than being accepted and then refused.
+
+**Why, restated because the code no longer says it.** It shipped as a tested
+mechanism that could not be used: the CDR holds no personnummer, the ips
+token path was never specified, and the legal basis was never established.
+Keeping it behind a flag meant a control that *looked* like a feature, and
+"shipped but unusable" is how something gets switched on by someone who never
+read the ADR. That was the argument for removing it rather than leaving it
+dormant.
+
+**ADR-0010 is not deleted — it is marked RETIRED and carries the design
+forward**, in particular the one thing a reviver must not lose: the key is
+held by the nodes and **never** the coordinator. A coordinator holding it
+could compute tokens for any identity it guessed and test them against what
+the nodes returned, turning a deduplication token into an identity oracle.
+Reviving it needs all three of an ips-side token path, a documented legal
+basis, and that design honoured.
+
+Nothing in the application imported the module — only the tests did — so
+removal touched no live path.

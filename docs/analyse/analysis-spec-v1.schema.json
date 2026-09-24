@@ -316,8 +316,7 @@
       "description": "How the same patient appearing in several CDRs is treated.",
       "enum": [
         "shared_guid",
-        "none",
-        "keyed_hash"
+        "none"
       ],
       "title": "Linkage",
       "type": "string"

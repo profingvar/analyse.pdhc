@@ -52,11 +52,13 @@ class Linkage(str, Enum):
     #: that one patient may be counted more than once.
     none = "none"
 
-    #: each node computes HMAC(linkage_key, personnummer) locally. Behind a
-    #: feature flag (AN-17) — and note the CDR holds no personnummer, so this
-    #: mode depends on ips, not on the CDR. Accepted by the model so a spec
-    #: round-trips; refused at validation unless the flag is on.
-    keyed_hash = "keyed_hash"
+    #: RETIRED 2026-09-24 (#687, operator decision). `keyed_hash` was shipped
+    #: as a tested mechanism that could not be used: the CDR holds no
+    #: personnummer, the ips token path was never specified, and the legal
+    #: basis was never established. A flag that looks like a feature is an
+    #: invitation, so the mode is gone rather than dormant. ADR-0010 keeps the
+    #: design and the reasoning — in particular why the key must never reach
+    #: the coordinator — if it is ever wanted again.
 
 
 class Agg(str, Enum):

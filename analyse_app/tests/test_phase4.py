@@ -1,4 +1,7 @@
-"""#659–#661 — Phase 4: regression, Kaplan-Meier, keyed_hash linkage."""
+"""#659–#661 — Phase 4: regression and Kaplan-Meier.
+
+The keyed_hash linkage tests were removed with the mode itself (#687,
+2026-09-24). See ADR-0010 for the design and why it was retired."""
 from __future__ import annotations
 
 import random
@@ -7,15 +10,9 @@ import pytest
 
 from app.engine import regression
 from app.privacy import DisclosurePolicy
-from app.privacy.linkage import (
-    LinkageDisabled, LinkageKey, LinkageNotPermitted, deduplicated_count,
-    enabled, join_across_nodes, token,
-)
 from app.testing import assert_clean
 
 P = DisclosurePolicy()
-ON = {"ANALYSE_ENABLE_KEYED_HASH": "1"}
-KEY = LinkageKey(b"k" * 32)
 
 
 class TestLinearRegressionIsExact:
@@ -96,52 +93,6 @@ class TestKaplanMeier:
         r = regression.km_finalize(regression.km_merge(
             [regression.km_local([(1, 1, 100)])]), P)
         assert any("not why" in n for n in r.notes)
-
-
-class TestKeyedHashLinkage:
-
-    def test_it_is_off_unless_the_flag_is_set(self):
-        assert enabled({}) is False
-        with pytest.raises(LinkageDisabled, match="behind ANALYSE_ENABLE"):
-            token("x", KEY, env={})
-
-    def test_the_same_identity_gives_the_same_token_on_any_node(self):
-        """That is the whole mechanism: two nodes agree without either
-        revealing who its patients are."""
-        assert token("19850101-1234", KEY, env=ON) == \
-               token("19850101-1234", KEY, env=ON)
-
-    def test_different_identities_differ(self):
-        assert token("a", KEY, env=ON) != token("b", KEY, env=ON)
-
-    def test_the_token_does_not_contain_the_identity(self):
-        assert "19850101" not in token("19850101-1234", KEY, env=ON)
-
-    def test_deduplicated_counting_is_what_it_permits(self):
-        a = token("p1", KEY, env=ON)
-        b = token("p2", KEY, env=ON)
-        assert deduplicated_count([[a, b], [a]]) == 2
-
-    def test_joining_across_nodes_is_refused_in_code(self):
-        """Present as a function so the attempt fails loudly and names the
-        reason, rather than someone building the join out of a set
-        intersection and believing it was permitted."""
-        with pytest.raises(LinkageNotPermitted, match="trusted mode"):
-            join_across_nodes()
-
-    def test_the_count_does_not_return_the_overlap(self):
-        """A coordinator holding the overlap could ask a node about those
-        specific patients."""
-        import inspect
-        src = inspect.getsource(deduplicated_count)
-        assert "return len(seen)" in src
-
-    def test_a_weak_linkage_key_is_refused(self):
-        with pytest.raises(ValueError, match="at least 32 bytes"):
-            LinkageKey(b"short")
-
-    def test_the_key_refuses_to_render_itself(self):
-        assert "redacted" in repr(LinkageKey(b"SECRETKEYMATERIAL" + b"x" * 20))
 
 
 class TestPhase4OutputsAreClean:
