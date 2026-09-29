@@ -1,7 +1,15 @@
 Flask>=3.0
 Flask-SQLAlchemy>=3.1
 Flask-Migrate>=4.0
-SQLAlchemy>=2.0
+# Pinned below 2.1 deliberately. SQLAlchemy 2.1 changed the DEFAULT
+# driver for a bare `postgresql://` URL from psycopg2 to psycopg v3,
+# which is not installed here. An unpinned `>=2.0` therefore built
+# fine on 2026-09-23 and crash-looped on the next rebuild with
+# ModuleNotFoundError: No module named 'psycopg' — with every test
+# passing, because the local venv still held 2.0.51.
+# The URL is also explicit about the driver now (docker-compose.yml),
+# so either of the two guards alone is sufficient.
+SQLAlchemy>=2.0,<2.1
 alembic>=1.13
 psycopg2-binary>=2.9
 gunicorn>=21.0
