@@ -6,6 +6,7 @@ place a malformed question can be caught cheaply. After this it costs a read.
 from __future__ import annotations
 
 import json
+import pathlib
 import subprocess
 import sys
 
@@ -134,8 +135,15 @@ class TestHashStability:
         """PYTHONHASHSEED randomises dict/set iteration per process. A hash
         that depended on it would be reproducible only within one run —
         exactly when nobody needs it."""
+        # The path comes from THIS FILE's location, not from '.'. With a bare
+        # '.' the subprocess could only import `app` when pytest happened to be
+        # invoked from analyse_app/ — run it from the repo root and this test
+        # failed with ModuleNotFoundError while appearing to report a
+        # hash-stability problem, which is an alarming thing to see while
+        # deciding whether to deploy.
+        root = str(pathlib.Path(__file__).resolve().parent.parent)
         code = (
-            "import json,sys;sys.path.insert(0,'.');"
+            f"import json,sys;sys.path.insert(0,{root!r});"
             "from app.spec import AnalysisSpec, spec_hash;"
             "print(spec_hash(AnalysisSpec.model_validate(json.load(sys.stdin))))"
         )
