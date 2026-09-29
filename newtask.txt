@@ -1,33 +1,25 @@
 # analyse.pdhc — current focus
 
-Reconstruction Phases 1–4 + AN-12 (the wire) + AN-13 (cohort criteria)
-are BUILT. 476 tests, gate clean. HEAD is local-only — none of it is deployed.
-Live at analyse.pdhc.se is still 0.2.0-reform (deployed 2026-09-03).
+DEPLOYED 2026-09-29. Release `2026-09-29T19-00-32Z`, `ANALYSE_ROLE=coordinator`,
+SQLAlchemy 2.0.54, migrations at `0002_audit_spec (head)`, all 5 CDR_ENDPOINTS
+carried through, `/api/v1/node/*` correctly absent. 467 tests.
 
 ## Next
-- #685 deploy the reconstruction. Read that ticket before starting: the
-  cdr2–5 federation wiring (#541) and the dashboard→analyse repoint (#540)
-  are DEPLOYED-ONLY, not in git, and a wholesale deploy drops them.
+- #712 stand up the per-CDR node topology (ADR-0005) — deferred on purpose.
+  The live analysis path uses CdrRegistry + CDR_ENDPOINTS, which already
+  federates across cdr2-6; the coordinator<->node transport is CLI-only today.
+  Do this when the simulated data exists, not before.
 - #686 gap G6 — the federated stack has still never run against real CDRs.
-  AN-12 removed the blocker (there is a wire now); the rest is deployment.
-- #688 Phase 3 usability walkthrough (acceptance outstanding).
+- #688 Phase 3 usability walkthrough (SSO-gated; needs a human with a real
+  professional token). This was #685's outstanding acceptance and is still
+  outstanding.
 - #687 gap G9 — keyed_hash has no identifier source. A decision, not code.
 
-## AN-14 (#701) is blocked on a judgement, not on code
-The cohort push-down cannot honour "spärr before read": cdr's FHIR search
-applies consent but not spärr, so a candidate query would hand the node
-blocked patients' rows before the node excludes them — and `patient=` is
-single-valued, so an allow-list cannot be passed either. Four options in
-progress.md (2026-09-24); (c) a repeated `patient=` on cdr looks right.
-Needs a decision, not more code.
+## Read #711 before rebuilding ANY pdhc service
+SQLAlchemy 2.1 changed the default driver for a bare `postgresql://` URL from
+psycopg2 to psycopg v3. 14 of 21 running services still use a bare URL and will
+crash-loop on their next cache-missing rebuild — sso.pdhc among them. analyse
+is fixed (pinned <2.1 AND an explicit `+psycopg2` URL); the rest are not.
 
-## Carried gap from AN-12
-A node cannot derive its cohort from `spec.cohort.include`:
-`run_spec()` never reads the inclusion criteria, and the CDR has no
-criterion-search endpoint. `ConfiguredCohortSource` (operator pins the
-cohort per node) is what a deployment gets today. Ticketed separately.
-
-## Operator live-smoke never confirmed (from the 2026-09-03 reform)
-Landing "choose patient", per-patient dashboard from CDR2-6, spärr badge +
-admin spärr-log, names via ips /clinics/<guid>/patients. SSO-gated, needs a
-human with a real professional token. Folded into #685's acceptance.
+Unit tests cannot see this: analyse had 467 passing tests while the deploy
+crash-looped, because the local venv still held 2.0.51.

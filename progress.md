@@ -1007,3 +1007,63 @@ research consent.
 
 **#700 stays OPEN** as the reminder, and #685 should not be considered done
 until it is revisited.
+
+## #685 — reconstruction DEPLOYED (2026-09-29)
+
+Release `2026-09-29T19-00-32Z`. Verified in the container: SQLAlchemy 2.0.54,
+`flask db current` = `0002_audit_spec (head)`, `ANALYSE_ROLE=coordinator`,
+5 CDR_ENDPOINTS intact, 11 engine modules present, **0 `/api/v1/node/*` routes**,
+`analyse.pdhc.se/healthz` 200.
+
+### The divergence survey found the opposite of what was feared
+
+The ticket warned a wholesale deploy would drop the deployed-only #540/#541
+wiring. It would not have: I pulled the prod tree and asked git whether it had
+ever seen each file's contents — **44 of 45 known, the sole exception `.env`**,
+which is gitignored by design. 40 of 44 files were byte-identical to HEAD; the
+4 that differed were simply older git states. **No on-server-only code edits
+existed.** The wiring lives entirely in `.env` — which does live in the release
+directory, not `shared/`, so carrying it forward was the one step that mattered.
+
+### The deploy was one line of config, not six containers
+
+I initially proposed standing up six node containers. That was wrong, and the
+operator pushed back. The live analysis path uses `CdrRegistry` + `fanout` via
+`CDR_ENDPOINTS` (already wired to cdr2–6 since #541); the AN-12
+coordinator↔node transport is reached only from `cli_analyse.py` and no web
+route dispatches to it. Nodes are for when the data exists — now #712.
+
+`ANALYSE_ROLE=coordinator` mattered for a second reason: unset defaults to
+`"both"`, which registers the node surface on the public instance. The code
+says why — *"a coordinator that also served /api/v1/node/run would be a
+second, quieter way into the data, reachable by anyone holding the transport
+secret."*
+
+### It crash-looped first, and the cause is platform-wide (#711)
+
+```
+ModuleNotFoundError: No module named 'psycopg'
+```
+
+**SQLAlchemy 2.1 changed the default driver for a bare `postgresql://` from
+psycopg2 to psycopg v3.** `requirements.txt` said `SQLAlchemy>=2.0`, so the
+2026-09-23 image resolved 2.0.51 and a fresh build resolved 2.1.1.
+
+Rolled back within ~90 seconds (symlink flip + rebuild), service restored on
+0.2.0-reform, then diagnosed. Fixed with two independent guards: the pin
+**and** an explicit `postgresql+psycopg2://` in compose.
+
+**467 tests passed throughout**, because the local venv still holds 2.0.51.
+Only a from-scratch image build can see it. And the rollback worked only
+because its unchanged `requirements.txt` hit the Docker layer cache — the
+cache is the sole thing hiding this across the platform.
+
+**14 of 21 running services still use a bare URL**, sso.pdhc among them. Filed
+as **#711**. sso was rebuilt earlier the same day and survived only on a cache
+hit; a rebuild after any requirements edit would have taken down platform
+authentication.
+
+### Still outstanding
+
+`#688` — the SSO-gated usability walkthrough was #685's acceptance and needs a
+human with a real professional token. It has not been done.
