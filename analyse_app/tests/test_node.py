@@ -187,7 +187,7 @@ class TestRunOrdering:
             self.blocked = set(blocked)
             self.asked_for = None
 
-        def excluded_by_spärr(self, guids, ips_base_url):
+        def excluded_by_spärr(self, guids, ips_base_url, **kw):
             return {g for g in guids if g in self.blocked}
 
         def read_observations(self, *, purpose, patient_guids, **kw):
@@ -269,7 +269,7 @@ class TestCohortIsAppliedAtTheNode:
                 for i in range(10)]
 
         class R:
-            def excluded_by_spärr(self, guids, ips_base_url):
+            def excluded_by_spärr(self, guids, ips_base_url, **kw):
                 return set()
 
             def read_observations(self, *, purpose, patient_guids, **kw):

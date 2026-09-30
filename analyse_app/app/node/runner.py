@@ -72,6 +72,7 @@ def check_data_mode(policy: NodePolicy, *, allow_live: bool = False) -> None:
 
 def run_spec(spec: AnalysisSpec, policy: NodePolicy, reader: NodeReader, *,
              project_key: ProjectKey, ips_base_url: str,
+             ips_api_key: str | None = None,
              cohort: list[str], allow_live: bool = False,
              requested_disclosure: DisclosurePolicy | None = None,
              research_projects: tuple[str, ...] = ()) -> NodeRun:
@@ -83,7 +84,10 @@ def run_spec(spec: AnalysisSpec, policy: NodePolicy, reader: NodeReader, *,
     disclosure = policy.disclosure(requested_disclosure)
 
     # 3 — spärr, before the read
-    blocked = reader.excluded_by_spärr(cohort, ips_base_url)
+    blocked = reader.excluded_by_spärr(
+        cohort, ips_base_url,
+        source_clinic_id=policy.source_clinic_id,
+        ips_api_key=ips_api_key)
     eligible = [g for g in cohort if g not in blocked]
     if blocked:
         run.excluded["blocked"] = len(blocked)

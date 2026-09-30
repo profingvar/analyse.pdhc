@@ -12,6 +12,13 @@ of it**. A policy a coordinator could relax would be a suggestion.
 node_id: cdr_uppsala                       # required
 cdr_base_url: http://127.0.0.1:9046        # required
 
+# The organisation whose data this CDR holds, as sso.pdhc knows it (#717).
+# REQUIRED IN PRACTICE: spärr is a question about a SOURCE — ips answers
+# "is data from source X readable for patient P" — so without this no
+# verdict can be obtained and the node refuses to run rather than
+# computing over patients whose block status is unknown.
+source_clinic_id: 7a69ab02-...             # required before the node can run
+
 # Purposes this organisation permits. From the PLATFORM's closed enum:
 #   research | statistics | quality_registry
 # An EMPTY or absent list means this node answers NOTHING.

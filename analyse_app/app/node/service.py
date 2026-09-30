@@ -40,6 +40,10 @@ class NodeContext:
     reader: NodeReader
     ips_base_url: str
     cohort_source: CohortSource
+    #: #717 — ips authenticates with `Authorization: ApiKey <key>` and reads
+    #: no other header. Empty means the spärr check cannot be made, and the
+    #: gate fails closed rather than skipping it.
+    ips_api_key: str = ""
     allow_live: bool = False
 
     @classmethod
@@ -71,6 +75,7 @@ class NodeContext:
             policy=policy,
             reader=NodeReader(base_url=policy.cdr_base_url, service_key=key),
             ips_base_url=ips,
+            ips_api_key=config.get("IPS_API_KEY", "") or "",
             cohort_source=ConfiguredCohortSource(config),
             allow_live=bool(config.get("ANALYSE_ALLOW_LIVE_DATA", False)),
         )
@@ -133,6 +138,7 @@ def handle_run(payload: dict[str, Any], ctx: NodeContext, *,
         spec, ctx.policy, ctx.reader,
         project_key=project_key,
         ips_base_url=ctx.ips_base_url,
+        ips_api_key=ctx.ips_api_key,
         cohort=cohort,
         allow_live=ctx.allow_live,
         requested_disclosure=requested_disclosure,

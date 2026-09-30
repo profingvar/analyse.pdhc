@@ -46,7 +46,9 @@ class _SynthReader:
         self.blocked = set(blocked)
         self.asked_for: list[str] | None = None
 
-    def excluded_by_spärr(self, guids, ips_base_url):
+    def excluded_by_spärr(self, guids, ips_base_url, **kw):
+        # **kw absorbs source_clinic_id / ips_api_key (#717). A synthetic
+        # reader has no ips to ask; it blocks nobody by construction.
         return {g for g in guids if g in self.blocked}
 
     def read_observations(self, *, purpose, patient_guids, **kw):

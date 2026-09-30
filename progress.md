@@ -1296,3 +1296,58 @@ Both were caught by running it, which is the argument for the whole exercise:
 The script also needed `sys.path` derived from `__file__` rather than the
 working directory — the same trap as the hash-stability test fixed the same
 morning.
+
+## #717 — the spärr gate called an endpoint that never existed (2026-09-30)
+
+`excluded_by_spärr` POSTed to `{ips}/api/v1/blocks/check-bulk`. ips has **no
+bulk endpoint at all**. Every call 404'd, the gate failed closed on every run,
+and a node could never return a single row — #715 had just fixed the dispatch
+so analyses compute over the right rows, and none would ever have reached them.
+
+### Two mistakes, and request.pdhc had made both before
+
+Its `ips_client` docstring records them: the wrong endpoint, and a header ips
+ignores — `require_auth` reads **only** `Authorization`, so `X-API-Key` is
+silently dropped. request.pdhc's version therefore failed **OPEN**: no
+ServiceRequest was ever hidden. analyse's failed **CLOSED**. Opposite
+directions, same root cause, and for analysis closed is right — an aggregate
+computed over a blocked patient has already used their data even if the number
+is thrown away.
+
+The real predicate, mirrored from the working caller rather than guessed:
+
+```
+GET /api/v1/patients/<guid>/blocks/check?source_clinic_id=<org>
+Authorization: ApiKey <key>
+```
+
+### Spärr is per SOURCE, which the node could not express
+
+ips answers "is data from source X readable for patient P". `NodePolicy` had
+no organisation identity at all, so the question was unaskable. Added
+`source_clinic_id` — and the policy file is exactly where it belongs, since
+ADR-0005 says that file is owned by the organisation behind the CDR.
+
+`404` means the patient is unknown to ips and therefore genuinely unblocked,
+not an outage — the same reading request.pdhc takes. Anything else fails
+closed. All three of `IPS_BASE_URL`, `source_clinic_id` and `IPS_API_KEY`
+refuse with a message naming what is missing, rather than returning "no blocks
+found" — a gate that silently stops gating is the failure being guarded
+against.
+
+Patients are checked in parallel, bounded at 8 workers: ips answers one at a
+time and a cohort is many, but an unbounded pool against a sibling is a denial
+of service with extra steps.
+
+493 tests (was 482). `tests/test_sparr_gate.py` asserts the contract — URL,
+params, `Authorization: ApiKey`, and that `X-API-Key` is *not* sent.
+
+### OPERATOR STEP — this is not finished without it
+
+**analyse has no `IPS_API_KEY`.** request.pdhc has one; analyse was never
+issued one. Until an ips ApiKey is minted for analyse and added to its `.env`,
+the gate keeps failing closed — safely, and now with a message that says
+exactly which of the three things is missing instead of a bare 404.
+
+The same applies to `source_clinic_id`: every node policy file needs one
+before that node can run.

@@ -38,6 +38,13 @@ class NodePolicy:
     node_id: str
     cdr_base_url: str
 
+    #: #717 — the organisation whose data this CDR holds, as sso.pdhc knows
+    #: it. Spärr is per SOURCE, not per patient: ips answers "is data from
+    #: source X readable for patient P". Without it no spärr verdict can be
+    #: obtained at all, so a node that omits it refuses to run rather than
+    #: computing over patients whose block status is unknown.
+    source_clinic_id: str | None = None
+
     #: Purposes this organisation permits. Empty means none — a node with no
     #: stated purposes answers nothing, which is the correct posture for a
     #: policy someone forgot to fill in.
@@ -75,7 +82,8 @@ class NodePolicy:
         if not isinstance(blob, dict):
             raise PolicyError("policy must be a mapping")
 
-        known = {"node_id", "cdr_base_url", "permitted_purposes",
+        known = {"node_id", "cdr_base_url", "source_clinic_id",
+                 "permitted_purposes",
                  "permitted_analyses", "k_min", "may_pool",
                  "may_use_other_orgs_rows", "data_mode"}
         unknown = set(blob) - known
@@ -109,6 +117,7 @@ class NodePolicy:
             node_id=blob["node_id"], cdr_base_url=blob["cdr_base_url"],
             permitted_purposes=purposes, permitted_analyses=analyses,
             k_min=int(blob.get("k_min", DEFAULT_K_MIN)),
+            source_clinic_id=(blob.get("source_clinic_id") or None),
             may_pool=bool(blob.get("may_pool", True)),
             may_use_other_orgs_rows=bool(
                 blob.get("may_use_other_orgs_rows", False)),
