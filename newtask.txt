@@ -15,6 +15,15 @@ carried through, `/api/v1/node/*` correctly absent. 467 tests.
   outstanding.
 - #687 gap G9 — keyed_hash has no identifier source. A decision, not code.
 
+## NOT FULLY DEPLOYED — linear_regression and kaplan_meier
+Both are implemented, tested and in the engine REGISTRY, and **no spec can
+request either**: they are absent from the spec's `Analysis` union. Markers sit
+in `app/engine/__init__.py` (the REGISTRY) and `app/engine/regression.py` so
+they are found by reading, not by another dead-code sweep. Exposing them needs
+decisions nobody has taken — what a linear regression declares as predictors vs
+outcome, how a survival spec expresses its event and censoring. **#712 should
+not stand up nodes before someone takes them.**
+
 ## Read #711 before rebuilding ANY pdhc service
 SQLAlchemy 2.1 changed the default driver for a bare `postgresql://` URL from
 psycopg2 to psycopg v3. 14 of 21 running services still use a bare URL and will

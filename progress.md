@@ -1208,3 +1208,36 @@ survived.
 `linear_regression` and `kaplan_meier` are in the engine REGISTRY but **not in
 the spec's `Analysis` union**, so no spec can request them. Ahead of the spec
 rather than broken; exposing them is a separate decision.
+
+## linear_regression / kaplan_meier marked NOT FULLY DEPLOYED (2026-09-30)
+
+Operator asked for these to be recorded rather than built, so they are not
+forgotten. Markers are in `app/engine/__init__.py` beside the REGISTRY entries
+and at the top of `app/engine/regression.py`, plus `newtask.txt`.
+
+They are implemented, tested and registered, and **unreachable**: the spec's
+`Analysis` union has no member of either type, so no spec can ask for one.
+Ahead of the spec, not broken. Exposing them needs decisions nobody has taken —
+what a linear regression declares as predictors vs outcome, how a survival spec
+expresses its event and censoring — and #712 should not stand up nodes first.
+
+Recorded in the code rather than only in a ticket because the ticket API's
+`/respond` auto-closes and there is no reopen, so #712 cannot be appended to
+without closing it.
+
+### A gotcha that cost twenty minutes
+
+Verifying the #715 invariant test "has teeth" meant temporarily disabling one
+dispatch branch: `"completeness"` → `"__disabled__"`. The test duly failed, the
+file was restored, and the suite then failed for real — with source that was
+demonstrably correct and a REGISTRY containing every key.
+
+**Python was serving stale bytecode.** A `.pyc` is validated against the
+source's *size and mtime*. `"completeness"` and `"__disabled__"` are the same
+length, and both writes landed inside the same second, so the cache looked
+valid and kept the disabled version. `inspect.getsource` reads the *file*, so
+it showed the correct code while the wrong code ran — which is what made it
+confusing.
+
+Clearing `__pycache__` restored 482 passing. If a same-length edit is ever used
+to prove a test fails, delete the caches afterwards.

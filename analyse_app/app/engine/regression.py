@@ -18,6 +18,13 @@ sums; it is not a dataset.
 A note kept deliberately visible: a regression coefficient is still a
 description. Nothing here licenses a causal reading, and the result notes say
 so in the same words the rest of the engine uses.
+
+NOT FULLY DEPLOYED. Both models are implemented, tested and registered, and
+neither is reachable: the spec's `Analysis` union has no member with
+type "linear_regression" or "kaplan_meier", so no spec can ask for one.
+
+See the note in engine/__init__.py's REGISTRY. Tracked with #712 — nodes
+should not be stood up without someone deciding whether these are exposed.
 """
 from __future__ import annotations
 
