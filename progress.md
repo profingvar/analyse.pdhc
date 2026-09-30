@@ -1453,7 +1453,7 @@ now in `docs/walkthrough_688/`, verified against the synthetic population.
 
 Building them found two things.
 
-**#723 — histogram bins below `k_min` could reach the page. FIXED, NOT DEPLOYED.**
+**#723 — histogram bins below `k_min` could reach the page. FIXED AND DEPLOYED.**
 A `width=2` histogram published a first bin of 2 patients against `k_min=5`.
 `merge_small_bins` folded a small bin into `out[-1]` only, so the first bin —
 appended while `out` was empty — went out at its raw count whenever the bin
@@ -1483,6 +1483,15 @@ and wired two kinds. #688's usability question cannot be answered until #724 is
 done — the walkthrough would be assessing a page that does not show its most
 important output.
 
-**Open for the operator:** #723 is committed locally and not deployed. It is a
-disclosure fix on a live surface; deploying is a state change on the mini that
-was not part of the greenlit task.
+**#723 deployed 2026-09-30 18:50 UTC.** Release `2026-09-30T07-50-25Z`,
+image `f86b4b7175ae` (rollback `b9cfa766`), predeploy backup
+`~/backups/predeploy/analyse.pdhc/20260930T185002Z/`. The container's
+`disclosure.py` hashed identically to the local pre-change file beforehand, so
+there was no server-side divergence to preserve. Verified in the running
+container: the three failing shapes now behave, 2000 random bin sets publish
+nothing below `k_min` and lose no patients, `/healthz` 200 `database:
+connected`, no errors in the log. pytest is deliberately absent from the prod
+image, so the guarantee was checked directly rather than via the suite.
+
+**Still open:** #724. The engine now suppresses correctly on a page that does
+not display suppression, which is the more consequential half.
