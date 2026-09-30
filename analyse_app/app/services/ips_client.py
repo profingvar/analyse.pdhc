@@ -23,6 +23,20 @@ The block list lets the dashboard:
 No global state beyond the module-level cache: the cache is keyed on
 patient guid alone (not user) because a block is patient-scoped — every
 caller's filter is identical for a given patient.
+
+#709 — several block helpers here (filter_blocked_rows, filter_blocked_points,
+has_any_active_block, check_source_blocked, patient_has_block, get_active_blocks)
+are the PRE-#663 spärr path and now have no caller. They are deliberately NOT
+deleted, and this note exists so the next dead-code sweep does not re-raise them.
+
+Spärr is still enforced, by a different route: `node/reader.excluded_by_spärr`
+calls ips `/api/v1/blocks/check-bulk` from node/runner.py:85, excludes blocked
+patients BEFORE any computation, and fails closed — if ips cannot answer, every
+patient counts as blocked.
+
+Removing superseded safety code is a deliberate act for whoever owns the spärr
+model, not a tidy-up. If that person decides these are gone for good, delete
+them and this note together.
 """
 from __future__ import annotations
 

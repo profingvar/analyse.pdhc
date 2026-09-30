@@ -1067,3 +1067,69 @@ authentication.
 
 `#688` — the SSO-gated usability walkthrough was #685's acceptance and needs a
 human with a real professional token. It has not been done.
+
+## #709 — the dead-end triage, after the deploy (2026-09-30)
+
+#704 item 5 was blocked until #685 landed, because prod was 0.2.0-reform while
+local was the rebuild and something might have been reachable in one and not
+the other. Prod is now HEAD, so that ambiguity is gone.
+
+Re-ran the detector: **53 candidates**. Classified every one by where it is
+actually referenced (app code, tests, templates) rather than by name alone:
+
+| | |
+|---|---|
+| 17 | **live** — referenced in app code; detector false positives |
+| 26 | **tests only** |
+| 10 | **no reference anywhere** |
+
+The value was not in the deletions. It was in what the "tests only" group
+turned out to be.
+
+### Two capabilities built, tested, and wired to nothing
+
+**#713 — 5 of 9 analysis types can never produce a result.** `REGISTRY` holds
+nine kinds; `node/runner.py::_dispatch` has an if-chain handling four.
+`compare_groups`, `completeness`, `kaplan_meier`, `linear_regression` and
+`over_time` fall through to `return None`, and line 141 skips a `None` partial
+**without appending a note**. A researcher asking for a comparison gets a run
+with no partial for it and no explanation. `regression.py` is the clearest
+case: its triple is named per model precisely so one module can serve two
+kinds — and the branch that would call it was never written, while all six of
+its functions carry 4–8 test references each.
+
+**#714 — `app/ui/` is a complete presentation layer with no surface.** Six
+modules, covered by `tests/test_ui.py`, imported by nothing outside the
+package. The sentence builders look like exactly the plain-language rendering
+the brief asks for.
+
+Both are the #704 class-A pattern, and neither is dead code.
+
+### Deleted — genuine #663 residue
+
+`#663` removed individual-patient analysis (it moved to dashboard.pdhc) and
+left the services behind:
+
+- `app/services/patient_directory.py` — 129 lines, imported by nothing, no
+  tests.
+- `auth.load_user` — a no-op whose docstring said it was "kept for back-compat
+  with existing route imports", where no such import exists.
+- `role_guards.admin_required` and `.clinical_required` — unused;
+  `researcher_required` and `nurse_required` stay.
+
+467 tests still pass. Detector down from 53 to 48.
+
+### Deliberately NOT deleted
+
+`ips_client`'s block helpers — `filter_blocked_rows`, `filter_blocked_points`,
+`has_any_active_block`, `check_source_blocked`, `patient_has_block`,
+`get_active_blocks` — are the pre-#663 spärr path and now have no caller.
+
+**Spärr is still enforced, by a different route**: `node/reader.excluded_by_spärr`
+calls ips `/api/v1/blocks/check-bulk` from `node/runner.py:85`, excludes blocked
+patients *before* any computation, and **fails closed** — if ips cannot answer,
+every patient counts as blocked. Verified, not assumed.
+
+Removing superseded safety code is a deliberate act for whoever owns the spärr
+model, not a tidy-up. A note now sits in `ips_client.py`'s module docstring
+saying so, so the next sweep reads the reasoning instead of re-raising them.

@@ -297,9 +297,6 @@ def org_guids_for(user) -> list[str]:
     return list(getattr(user, "org_ids", []) or [])
 
 
-def load_user():  # noqa: D401
-    """No-op kept for back-compat with existing route imports."""
-    return None
 
 
 # ---------- CLI: bootstrap SU (Rule 23) ----------
