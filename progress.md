@@ -1241,3 +1241,58 @@ confusing.
 
 Clearing `__pycache__` restored 482 passing. If a same-length edit is ever used
 to prove a test fails, delete the caches afterwards.
+
+## #708 — the first sibling smoke, and what it found on its first run
+
+`deploy/smoke_siblings.py`, run inside the container because that is the only
+place the real service keys and network names exist:
+
+```
+docker exec analyse_pdhc_app python deploy/smoke_siblings.py
+```
+
+Read-only, so it is safe against production at any time, including straight
+after a deploy. `--json` for machine output; exit code 0 only if everything
+passed.
+
+**It drives the app's own clients** — `CdrRegistry`, `fanout`, `NodeReader` —
+rather than hand-written `curl`. That is the whole design point. Every
+cross-service defect in the 2026-09-29/30 sweep was a mismatch between what a
+client sent and what the sibling accepted (#710 a bearer the caller could not
+hold, #712 a response shape that crashed the parser, #713 a key named
+`organisation_guid` where the client read `guid`). A smoke built from my idea
+of the contract would have passed through all of them.
+
+It also uses **production's own `CDR_FANOUT_TIMEOUT`**, not a value chosen to
+make it pass. If a fanout cannot finish inside what the live path allows, that
+is the finding.
+
+### Two real findings on the first run
+
+**#717 — the node spärr gate calls an ips endpoint that does not exist.**
+`excluded_by_spärr` POSTs to `/api/v1/blocks/check-bulk`; ips has no such
+route, and no bulk endpoint at all. The real one is
+`GET /api/v1/patients/<guid>/blocks/check`, per patient. It 404s, the gate
+fails **closed** — correct, and exactly what its docstring promises — so no
+data leaks, but a node excludes *every* patient every time. #715 fixed the
+dispatch so analyses compute over the right rows; this means no rows would
+ever reach them. The platform memory already had the answer: "use
+/blocks/check for cross-service spärr". The bulk variant was assumed.
+
+**#718 — cdr2–5 take ~7.5s to answer `_count=1` on `/api/v1/fhir/Observation`**
+while `/api/v1/stats` answers in ~100ms and cdr6 answers in 6ms. Five parallel
+queries exceed the live 15s fanout timeout, so `observations_search` — a live
+analyse surface — is degraded against cdr2–5 today.
+
+### Two of my own mistakes, worth recording
+
+Both were caught by running it, which is the argument for the whole exercise:
+
+- I wrote `path="fhir/Observation"`; the live code uses
+  `/api/v1/fhir/Observation`. A smoke that invents the path tests nothing.
+- `FanoutResponse.failed` is a list of id **strings**, and `NodeReader` takes
+  `base_url`/`service_key`, not `cdr_base_url`. I guessed both signatures.
+
+The script also needed `sys.path` derived from `__file__` rather than the
+working directory — the same trap as the hash-stability test fixed the same
+morning.
