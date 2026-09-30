@@ -115,7 +115,7 @@ def main(as_json: bool = False) -> int:
                            f"within the live {t:g}s timeout")
 
         # ── ips: the spärr gate ──
-        @check("ips: blocks/check-bulk answers, and the gate fails CLOSED")
+        @check("ips: the spärr predicate answers, and the gate fails CLOSED")
         def _():
             from app.node.reader import NodeReader
             ips = cfg.get("IPS_BASE_URL")
@@ -123,9 +123,16 @@ def main(as_json: bool = False) -> int:
                 return False, "IPS_BASE_URL not set"
             # base_url is irrelevant to the spärr call — it talks to ips, not
             # to a CDR — but the dataclass requires it.
+            # #717: per patient, per SOURCE, Authorization: ApiKey.
+            # A missing key or source now refuses by name instead of 404ing,
+            # so this check distinguishes "not configured" from "ips is down".
             r = NodeReader(base_url="unused",
                            service_key=cfg.get("ANALYSE_PDHC_SERVICE_KEY", ""))
-            blocked = r.excluded_by_spärr(["smoke-not-a-real-patient"], ips)
+            blocked = r.excluded_by_spärr(
+                ["smoke-not-a-real-patient"], ips,
+                source_clinic_id=cfg.get("ANALYSE_SOURCE_CLINIC_ID")
+                or "smoke-probe-org",
+                ips_api_key=cfg.get("IPS_API_KEY"))
             # A reachable ips returns a set (usually empty for a fake guid).
             # If it were unreachable the reader raises, and that raise IS the
             # fail-closed behaviour — reported as a failure here on purpose,
