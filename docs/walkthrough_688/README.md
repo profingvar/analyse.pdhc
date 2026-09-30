@@ -43,24 +43,47 @@ patients are merged into one label so the published count is 6 rather than
 
 ## What these specs actually showed (2026-09-30)
 
-The engine suppresses correctly. **The page does not show it.**
-
-`_render_result` in `app/routes/analysis.py` handles two of the seven analysis
-kinds — `describe` (sentence) and `histogram` (svg). A `frequency` result
-produces a card with its heading, no counts, no sentence, and this line:
+The engine suppressed correctly and the page did not show it. `_render_result`
+handled two of the seven analysis kinds, so a `frequency` result rendered as a
+heading, no counts, and this line:
 
 > Siffrorna är exakta även när flera källor kombineras.
 
-So on the card where a category was withheld, the only sentence tells the reader
-the figures are exact, and no figures are shown. That is worse than an empty
-card — the reassurance is about numbers that are not on the page.
+On the card where a category had been withheld, the only sentence told the
+reader the figures were exact and showed none.
 
-`frequency`, `correlation`, `compare_groups`, `over_time` and `completeness` all
-render as that empty card. And `app/ui/sentences.py` already contains
-`suppression_sentence(k_min, lang)`, written and tested for precisely this
-moment, with no call site outside `app/ui/`. So do `comparison_sentence`,
-`linkage_sentence`, `charts.data_table`, `charts.heatmap` and `charts.curve`.
+Fixed in #724, #725 and #726. `01_suppression.json` now renders:
 
-This is #714's finding recurring one layer in: #722 gave `app/ui` a route, but
-wired two kinds of seven, and the suppression sentence was not one of them.
-Tracked as #724.
+```
+frequency
+  Grupper med färre än 5 patienter visas som <5. Ibland döljs även en grupp
+  till, så att den första inte ska gå att räkna ut från summorna.
+  Grupp    Patienter
+  male     6
+  female   <5
+```
+
+Three things changed to get there, and two of them were found by these specs
+rather than by the rendering work:
+
+* **#724** — all seven kinds render. `frequency`, `compare_groups` and
+  `completeness` get tables, `correlation` gets a non-causal sentence,
+  `over_time` gets a curve, and a histogram now gets the data table its own
+  docstring calls "always rendered with the chart". An exactness line is only
+  attached to a card that is showing something.
+* **#725** — the coordinator was discarding every node note. `combine()` read
+  `node_id`, `n_patients`, `may_pool` and `partials` from each run and never
+  `notes`, so a node that explained why it returned nothing was never heard.
+  One line per distinct note, attributed to the sources that raised it.
+* **#726** — `Group.where` used a different operator vocabulary than cohort
+  criteria (`lt` vs `<`) and validated neither. A group written with the symbol
+  — the spelling the rest of the spec uses — passed validation, was rejected at
+  every node, and took `compare_groups` out of the results with it. Both
+  spellings now normalise; an unknown one is refused before any data is read.
+
+The reader also now gets the linkage warning (`linkage: none` means a patient
+may be counted twice), which was written, tested, and never called.
+
+**Still true:** `over_time` cannot be exercised on synthetic data. `synth.build`
+writes `effective_at: None` on every row, so there are no dated observations to
+plot. The node says so and, since #725, the page repeats it.

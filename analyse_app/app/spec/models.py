@@ -171,9 +171,54 @@ class Variable(_Strict):
 
 # ── groups ────────────────────────────────────────────────────────────
 
+#: `Group.where` operators, normalised to the names the node evaluates.
+#:
+#: Both spellings are accepted because the spec language already contains
+#: both: a cohort criterion writes ``"op": ">="`` (the `Op` enum), while the
+#: node's group evaluator keys on ``"gte"``. Until 2026-09-30 nothing
+#: validated this dict's keys, so a group written with the SYMBOL — the
+#: spelling the rest of the spec uses — passed validation, was rejected at
+#: every node, and took its analysis out of the results with it. See #726.
+_GROUP_OP_ALIASES = {
+    ">=": "gte", ">": "gt", "<=": "lte", "<": "lt", "==": "eq", "!=": "ne",
+    "gte": "gte", "gt": "gt", "lte": "lte", "lt": "lt", "eq": "eq", "ne": "ne",
+}
+
+
 class Group(_Strict):
     name: str = Field(min_length=1)
     where: dict[str, dict[str, float]] = Field(min_length=1)
+
+    @field_validator("where")
+    @classmethod
+    def _normalise_operators(cls, v):
+        """Reject an unknown operator HERE, not at the node.
+
+        The node raises on one, but a node error becomes a note, the note is
+        attached to a group that is then dropped, and an analysis needing two
+        groups simply disappears from the result. Validating in the spec means
+        the analyst is told before any patient data is read.
+        """
+        out: dict[str, dict[str, float]] = {}
+        for var, preds in v.items():
+            if not preds:
+                raise ValueError(
+                    f"group predicate on '{var}': give at least one comparison")
+            norm: dict[str, float] = {}
+            for op, target in preds.items():
+                canon = _GROUP_OP_ALIASES.get(op)
+                if canon is None:
+                    raise ValueError(
+                        f"group predicate on '{var}': unknown operator "
+                        f"'{op}'. Use one of "
+                        f"{', '.join(sorted(set(_GROUP_OP_ALIASES)))}.")
+                if canon in norm:
+                    raise ValueError(
+                        f"group predicate on '{var}': operator '{canon}' "
+                        f"given twice (as '{op}' and another spelling)")
+                norm[canon] = target
+            out[var] = norm
+        return out
 
 
 # ── analyses ──────────────────────────────────────────────────────────

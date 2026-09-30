@@ -68,6 +68,42 @@ def comparison_sentence(a: str, b: str, comp: dict[str, Any],
             f"This describes the difference between the groups, not a cause.")
 
 
+def correlation_sentence(a: str, b: str, stats: dict[str, Any],
+                         lang: str = DEFAULT_LANG) -> str:
+    """Strength first, then the warning that a correlation is not a reason.
+
+    The wording avoids every term in BANNED deliberately: a sentence that
+    disclaims causation by NAMING it ("does not cause") still puts the word
+    in front of a reader who will remember the word and not the negation.
+    """
+    if stats.get("suppressed"):
+        return ("För få patienter för att visa ett samband."
+                if lang == "sv" else
+                "Too few patients to show an association.")
+    r = stats.get("r")
+    n = stats.get("n")
+    if lang == "sv":
+        return (f"Bland {n} patienter följdes {a} och {b} åt "
+                f"({_strength(r, 'sv')}, r = {_fmt(r, 2)}). "
+                f"Ett samband mellan två värden säger inget om varför.")
+    return (f"Among {n} patients, {a} and {b} moved together "
+            f"({_strength(r, 'en')}, r = {_fmt(r, 2)}). "
+            f"An association between two values says nothing about why.")
+
+
+def _strength(r: Any, lang: str) -> str:
+    """Plain words for a number most readers cannot calibrate."""
+    try:
+        m = abs(float(r))
+    except (TypeError, ValueError):
+        return "okänd styrka" if lang == "sv" else "unknown strength"
+    sv, en = ("svagt", "måttligt", "starkt"), ("weak", "moderate", "strong")
+    word = (sv if lang == "sv" else en)[0 if m < 0.3 else 1 if m < 0.7 else 2]
+    if lang == "sv":
+        return f"{word} samband, {'samma' if (r or 0) >= 0 else 'motsatt'} riktning"
+    return f"{word}, {'same' if (r or 0) >= 0 else 'opposite'} direction"
+
+
 def exactness_sentence(exactness: str, lang: str = DEFAULT_LANG) -> str:
     if exactness == "exact":
         return ("Siffrorna är exakta även när flera källor kombineras."

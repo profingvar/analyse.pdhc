@@ -181,3 +181,148 @@ class TestAChartActuallyRenders:
         assert "lang" not in sig.parameters, (
             "charts.histogram gained a lang parameter — update the caller in "
             "app/routes/analysis.py, which deliberately does not pass one")
+
+
+# ── #724 / #725 / #726 ────────────────────────────────────────────────
+
+def _suppressing_spec(**over):
+    """Cohort narrow enough that one category falls below k_min.
+
+    10 patients, 4/4/2 across the sources: every source below k_min on its
+    own, the pool above it. Nothing in the shipped example ever crossed
+    k_min, which is why a suppressed result had never been rendered.
+    """
+    s = {
+        "title": "Kön vid högt mätvärde", "purpose": "statistics",
+        "sources": ["cdr1", "cdr2", "cdr3"],
+        "cohort": {"include": [
+            {"observation": "x", "op": ">=", "value": 18}]},
+        "variables": [{"name": "matvarde", "from": "x", "agg": "max"},
+                      {"name": "kon", "from": "demographics.sex"}],
+        "analyses": [{"type": "frequency", "vars": ["kon"]}],
+    }
+    s.update(over)
+    return s
+
+
+class TestSuppressionReachesTheReader:
+    """#724. The engine suppressed correctly onto a page that showed nothing.
+
+    A `frequency` card used to render as its heading plus one line —
+    "the figures are exact even when several sources are combined" — with no
+    figures under it. On the one card where a category had been withheld, the
+    reader was reassured about numbers that were not there.
+    """
+
+    def test_a_withheld_category_is_visible_as_a_number_and_a_reason(
+            self, app, client):
+        r = client.post("/analysis/run?format=json", json=_suppressing_spec())
+        assert r.status_code == 200
+        freq = [b for b in r.get_json()["blocks"] if b["kind"] == "frequency"]
+        assert freq, "frequency produced no block at all"
+        b = freq[0]
+        assert b["table"], "the counts were computed and never displayed"
+        # data_table escapes, correctly, so the marker is "&lt;5".
+        assert "&lt;5" in b["table"], "the withheld count is not on the page"
+        assert "6" in b["table"], "the surviving count is not on the page"
+        assert b["sentence"] and "5" in b["sentence"], \
+            "nothing explains why a category is missing"
+
+    def test_the_page_shows_the_notation_the_sentence_promises(
+            self, app, client):
+        """SUPPRESSED is the literal "<k" and the sentence says "<5". The
+        reader was told to look for one notation and shown another."""
+        r = client.post("/analysis/run?format=json", json=_suppressing_spec())
+        b = [x for x in r.get_json()["blocks"]
+             if x["kind"] == "frequency"][0]
+        assert "&lt;k" not in b["table"] and "<k" not in b["table"], \
+            "the raw sentinel leaked to the page"
+
+    def test_exactness_is_not_the_only_line_on_a_card(self, app, client):
+        """An exactness note qualifies figures. With no figures it is a claim
+        about nothing, which is how the frequency card used to read."""
+        r = client.post("/analysis/run?format=json", json=_suppressing_spec())
+        for b in r.get_json()["blocks"]:
+            if b["exactness"]:
+                assert b["svg"] or b["table"] or b["sentence"], \
+                    f"{b['kind']}: exactness attached to an empty card"
+
+    @pytest.mark.parametrize("analyses,kind", [
+        ([{"type": "correlation", "vars": ["matvarde", "v2"]}], "correlation"),
+        ([{"type": "completeness"}], "completeness"),
+    ])
+    def test_every_kind_renders_something(self, app, client, analyses, kind):
+        spec = _suppressing_spec(analyses=analyses)
+        spec["variables"].append({"name": "v2", "from": "x", "agg": "mean"})
+        spec["cohort"]["include"][0]["value"] = 0      # widen, not the point
+        r = client.post("/analysis/run?format=json", json=spec)
+        assert r.status_code == 200
+        blocks = [b for b in r.get_json()["blocks"] if b["kind"] == kind]
+        assert blocks and (blocks[0]["svg"] or blocks[0]["table"]
+                           or blocks[0]["sentence"]), \
+            f"{kind} rendered an empty card"
+
+
+class TestTheNodesExplanationSurvives:
+    """#725. combine() read everything from a node run except its notes."""
+
+    def test_a_node_note_reaches_the_page(self, app, client):
+        spec = _suppressing_spec(
+            index_event={"observation": "x"},
+            analyses=[{"type": "over_time", "var": "matvarde",
+                       "bin_days": 30, "range_days": [0, 90]}])
+        r = client.post("/analysis/run?format=json", json=spec)
+        assert r.status_code == 200
+        payload = r.get_json()
+        assert not payload["blocks"], "expected over_time to yield nothing"
+        assert payload["notes"], \
+            "the run returned nothing and said nothing about why"
+        assert any("over_time" in n for n in payload["notes"])
+
+    def test_one_problem_at_three_sources_is_one_line(self, app, client):
+        spec = _suppressing_spec(
+            index_event={"observation": "x"},
+            analyses=[{"type": "over_time", "var": "matvarde",
+                       "bin_days": 30, "range_days": [0, 90]}])
+        notes = client.post("/analysis/run?format=json",
+                            json=spec).get_json()["notes"]
+        over = [n for n in notes if "over_time" in n]
+        assert len(over) == 1, f"repeated once per source: {over}"
+        assert "Every source" in over[0]
+
+    def test_the_double_counting_warning_is_actually_shown(self, app, client):
+        """linkage_sentence was written, tested, and never called."""
+        spec = _suppressing_spec(linkage="none")
+        notes = client.post("/analysis/run?format=json",
+                            json=spec).get_json()["notes"]
+        assert any("mer än en gång" in n for n in notes), \
+            "linkage: none warned nobody about double counting"
+
+
+class TestGroupOperatorVocabulary:
+    """#726. Two spellings for one concept, and the wrong one was silent."""
+
+    def _grouped(self, op):
+        return _suppressing_spec(
+            groups=[{"name": "lag", "where": {"matvarde": {op: 19}}},
+                    {"name": "hog", "where": {"matvarde": {"gte": 19}}}],
+            analyses=[{"type": "compare_groups", "vars": ["matvarde"]}],
+            cohort={"include": [
+                {"observation": "x", "op": ">=", "value": 0}]})
+
+    @pytest.mark.parametrize("op", ["<", "lt"])
+    def test_both_spellings_produce_the_same_analysis(self, app, client, op):
+        """The symbol is what a cohort criterion uses, so a spec author will
+        write it. It used to validate, be rejected at every node, and take
+        compare_groups out of the results with it — silently."""
+        r = client.post("/analysis/run?format=json", json=self._grouped(op))
+        assert r.status_code == 200
+        kinds = [b["kind"] for b in r.get_json()["blocks"]]
+        assert "compare_groups" in kinds, \
+            f"operator {op!r} lost the analysis entirely"
+
+    def test_an_unknown_operator_is_refused_before_any_data_is_read(
+            self, app, client):
+        r = client.post("/analysis/run?format=json", json=self._grouped("=<"))
+        assert r.status_code == 400
+        assert "unknown operator" in r.get_json()["message"]

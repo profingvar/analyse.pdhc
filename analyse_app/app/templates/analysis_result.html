@@ -21,6 +21,9 @@
   .banner { border-left:4px solid var(--warn-br); background:var(--warn-bg);
             padding:.7rem .9rem; border-radius:4px; margin-bottom:1rem; }
   .sentence { font-size:1.05rem; margin:.3rem 0 .6rem; }
+  .notes ul { margin:.4rem 0 0; padding-left:1.1rem; }
+  .notes li { font-size:.9rem; margin:.15rem 0; }
+  caption { text-align:left; font-weight:600; padding:.3rem .4rem; }
   table { width:100%; border-collapse:collapse; font-size:.9rem; }
   td, th { padding:.3rem .4rem; border-bottom:1px solid #eee; text-align:left; }
   svg { max-width:100%; height:auto; }
@@ -41,11 +44,19 @@
     </div>
   {% endif %}
 
+  {% if notes %}
+    <div class="banner notes">
+      <strong>Om den här körningen.</strong>
+      <ul>{% for n in notes %}<li>{{ n }}</li>{% endfor %}</ul>
+    </div>
+  {% endif %}
+
   {% for b in blocks %}
     <div class="card">
       <h2>{{ b.kind }}</h2>
       {% if b.sentence %}<p class="sentence">{{ b.sentence }}</p>{% endif %}
       {% if b.svg %}{{ b.svg|safe }}{% endif %}
+      {% if b.table %}{{ b.table|safe }}{% endif %}
       {% if b.exactness %}<p class="muted">{{ b.exactness }}</p>{% endif %}
     </div>
   {% else %}

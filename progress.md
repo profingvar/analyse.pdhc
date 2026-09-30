@@ -1495,3 +1495,42 @@ image, so the guarantee was checked directly rather than via the suite.
 
 **Still open:** #724. The engine now suppresses correctly on a page that does
 not display suppression, which is the more consequential half.
+
+## 2026-09-30 — #724 / #725 / #726: the page now shows what the engine knows
+
+Wiring the suppression renderer surfaced two defects behind it. All three are
+the same shape: the system computed the right thing and then discarded it
+before anyone could read it.
+
+**#724 — /analysis rendered 2 of 7 analysis kinds.** `frequency` — the kind
+that demonstrates suppression — rendered as a heading plus "Siffrorna är
+exakta även när flera källor kombineras", with no figures beneath it. All
+seven kinds now render. A histogram gets the data table its own docstring
+describes as "always rendered with the chart". Exactness is attached only to a
+card that shows something. `SUPPRESSED` is the literal `"<k"` and the
+suppression sentence promises `<5`, so the sentinel is now substituted at the
+edge — the page explained a notation it did not use.
+
+**#725 — the coordinator discarded every node note.** `combine()` read
+`node_id`, `n_patients`, `may_pool` and `partials` from each node run and never
+`notes`. A node that explained why it returned less than was asked was never
+heard; the run came back empty with nothing anywhere to say why. Notes are now
+collected, deduplicated (one problem at three sources is one line, not three)
+and attributed. Audited first: every note the node can emit is structural, and
+the only number among them counts groups the analyst declared, so none can
+carry a patient count past the disclosure pass.
+
+**#726 — `Group.where` used a different operator vocabulary than cohort
+criteria.** `Op` is symbols (`>=`, `<`), `_GROUP_OPS` is names (`gte`, `lt`),
+and `Group.where` validated neither. A group written with the symbol — the
+spelling the rest of the spec language uses — passed validation, was rejected
+at every node, and took `compare_groups` out of the results with it. HTTP 200,
+zero results, no error the user could see. Both spellings normalise now and an
+unknown one is refused before any patient data is read.
+
+Also live for the first time: `linkage_sentence`, the double-counting warning
+the brief requires, which was written, tested, and never called.
+
+521 tests pass (was 510). `over_time` still cannot be exercised on synthetic
+data — `synth.build` writes `effective_at: None` — and the page now says so
+instead of silently omitting the analysis.
