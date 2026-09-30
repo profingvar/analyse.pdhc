@@ -28,6 +28,7 @@ from __future__ import annotations
 from flask import Blueprint, current_app, jsonify, request, g
 
 from app.analyse.federation import CdrRegistry, fanout
+from app.analyse.purpose import purpose_headers
 
 
 bp = Blueprint("analyse_canonical", __name__)
@@ -49,6 +50,13 @@ def query_table(table_name):
     patient = (request.args.get("patient_guid") or "").strip()
     if not patient:
         return jsonify({"error": "patient_guid required"}), 400
+
+    # #700 — this fans a named patient's rows out of every CDR. Neither side
+    # filtered on consent, because the CDR gate only fires for a caller that
+    # declares a purpose and nothing here declared one.
+    fwd, err = purpose_headers()
+    if err:
+        return err
 
     limit = min(int(request.args.get("limit", 100)), 500)
     offset = int(request.args.get("offset", 0))
@@ -74,6 +82,7 @@ def query_table(table_name):
         method="GET",
         path=f"/api/v1/canonical/{table_name}",
         params=params,
+        extra_headers=fwd,
     )
 
     merged_rows: list[dict] = []

@@ -23,6 +23,7 @@ from __future__ import annotations
 from flask import Blueprint, current_app, jsonify, request, g
 
 from app.analyse.federation import CdrRegistry, fanout
+from app.analyse.purpose import purpose_headers
 
 
 bp = Blueprint("analyse_openehr", __name__)
@@ -36,12 +37,14 @@ def _auth_ok(blob: dict) -> tuple[bool, tuple[dict, int] | None]:
     return True, None
 
 
-def _federated_search(path: str, params: dict, registry: CdrRegistry):
+def _federated_search(path: str, params: dict, registry: CdrRegistry,
+                      extra_headers: dict | None = None):
     response = fanout(
         registry,
         method="GET",
         path=path,
         params=params,
+        extra_headers=extra_headers,
     )
     merged: list[dict] = []
     responded = 0
@@ -69,6 +72,11 @@ def search_compositions():
         return jsonify({"error": "patient query parameter required"}), 400
     archetype = (request.args.get("archetype") or "").strip() or None
 
+    # #700 — a named patient's compositions from every CDR. See purpose.py.
+    fwd, perr = purpose_headers()
+    if perr:
+        return perr
+
     registry = CdrRegistry.from_config(current_app.config)
     if not registry.all:
         return jsonify({
@@ -83,7 +91,7 @@ def search_compositions():
     if archetype:
         params["archetype"] = archetype
     merged, responded = _federated_search(
-        "/api/v1/openehr/composition", params, registry)
+        "/api/v1/openehr/composition", params, registry, extra_headers=fwd)
     return jsonify({
         "patient": patient,
         "total": len(merged),
@@ -100,6 +108,12 @@ def patient_compositions(patient):
     if not ok:
         return jsonify(err[0]), err[1]
 
+    # #700. Gated before the empty-registry short-circuit below, so the
+    # answer does not depend on how many CDRs happen to be configured.
+    fwd, perr = purpose_headers()
+    if perr:
+        return perr
+
     registry = CdrRegistry.from_config(current_app.config)
     if not registry.all:
         return jsonify({
@@ -111,7 +125,8 @@ def patient_compositions(patient):
         }), 200
 
     merged, responded = _federated_search(
-        f"/api/v1/openehr/ehr/{patient}/compositions", {}, registry)
+        f"/api/v1/openehr/ehr/{patient}/compositions", {}, registry,
+        extra_headers=fwd)
     return jsonify({
         "patient": patient,
         "total": len(merged),

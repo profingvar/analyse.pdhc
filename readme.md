@@ -58,8 +58,16 @@ half from dashboard(cd-assist).
 - `POST/GET /api/cohort`, `/api/cohort/<id>/{histogram,boxplot,scatter,trend,export}`
   — researcher cohort engine (analysis-phase, `researcher_required`, audited).
 - `/api/v1/observations` (#291, gateway/monitor service-key).
-- `/api/v1/stats`, `/api/v1/canonical/<table>`, `/api/v1/openehr/*` (#292,
-  service-key).
+- `/api/v1/stats` (#292, service-key). Row counts per table only — no patient
+  rows, so no read purpose is required.
+- `/api/v1/canonical/<table>`, `/api/v1/openehr/*` (#292, service-key **plus a
+  declared read purpose**). These return a named patient's rows from every CDR,
+  so since #700 the caller must send `X-Access-Purpose` — one of `research`,
+  `statistics`, `quality_registry` — which is forwarded to each CDR's consent
+  gate. `research` also requires `X-Research-Project-Guids`, because consent is
+  granted per project rather than to research in general. A request without a
+  purpose is refused with 400 and a message naming the valid values; it is not
+  served unfiltered.
 - SSO web login (`/auth/login|callback|logout`) + `/` researcher workspace shell.
 
 ## What is NOT here (belongs to cd-assist)

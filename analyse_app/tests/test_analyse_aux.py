@@ -28,6 +28,15 @@ def _hdr(service="gateway.pdhc", key="test-gw-key"):
     return {"X-Source-Service": service, "X-Service-Key": key}
 
 
+def _hdr_p(purpose="statistics", **kw):
+    """#700: the federated PATIENT-data endpoints now require the caller to
+    declare a read purpose, which is forwarded to every CDR's consent gate.
+    Tests of merge behaviour declare one so they exercise the merge; the gate
+    itself is covered in test_purpose_gate.py. `statistics` is used rather
+    than `research` because research additionally requires project guids."""
+    return {**_hdr(**kw), "X-Access-Purpose": purpose}
+
+
 def _fan(ok_bodies):
     results = [
         FanoutResult(cdr_id=f"cdr{i+1}", base_url=f"http://cdr{i+1}",
@@ -105,7 +114,7 @@ def test_canonical_merges_rows_with_cdr_tag():
     with patch("app.analyse.canonical.fanout", return_value=fan):
         r = _app().test_client().get(
             "/api/v1/canonical/health_observations?patient_guid=p1",
-            headers=_hdr())
+            headers=_hdr_p())
     assert r.status_code == 200
     body = r.get_json()
     assert body["total"] == 3
@@ -126,7 +135,7 @@ def test_openehr_composition_search_merges():
     ])
     with patch("app.analyse.openehr.fanout", return_value=fan):
         r = _app().test_client().get(
-            "/api/v1/openehr/composition?patient=p-1", headers=_hdr())
+            "/api/v1/openehr/composition?patient=p-1", headers=_hdr_p())
     assert r.status_code == 200
     body = r.get_json()
     assert body["total"] == 3

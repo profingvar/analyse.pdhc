@@ -1555,3 +1555,53 @@ directory, so for about four minutes the release dir and the running image
 disagreed. That state is harmless — the container runs from its image — but it
 is invisible unless you compare the two, and a rebuild for an unrelated reason
 would have picked up unreviewed code. Copy and rebuild in one authorised step.
+
+## 2026-09-30 — #700: the federated patient endpoints now fail closed on purpose
+
+Both CDR consent gates (#664 on cdr1-5, #699 on cdr_6) are opt-in by design,
+and deliberately so — a gate that started refusing existing readers would have
+taken the platform down. The consequence is that a gate only fires when a
+caller declares a purpose, and on analyse's federated endpoints nothing did.
+`/api/v1/canonical/<table>` and `/api/v1/openehr/*` fanned a named patient's
+rows out of every CDR with analyse's service key, applied no `analysis_filter`
+locally, and sent no purpose. Neither side filtered.
+
+**Investigation changed the question the ticket asked.** It posed a binary —
+operator passthrough, or secondary-use read — and the endpoints do not divide
+that way:
+
+* `/api/v1/stats` returns row counts per table and no patient rows at all, so
+  there is nothing for a consent join to filter. Exempt, and a test now says so
+  deliberately.
+* `canonical` and `openehr` both require a patient identifier and return that
+  one patient's rows. Single-patient lookups, not cohort reads.
+* gateway's `/api/v1/observations` proxy is contract-scoped delivery — gateway
+  computes the ServiceRequest scope, applies spärr and audits. Declaring a
+  research purpose there would apply an EHDS opt-out to a care-delivery read
+  and remove rows the caller is entitled to. The ticket's reading of "operator
+  passthrough" is right and now has a reason written down.
+* **None of the three has a caller** in any repo, though all are documented
+  surface kept for `gateway.pdhc` and `monitor.pdhc`.
+
+That last point is why the fix is to fail closed rather than to declare a
+purpose on the caller's behalf: the correct basis is a property of the caller,
+there is no caller, and the wrong guess is not neutral. Operator chose this
+over the three alternatives.
+
+Only the secondary-use values are declarable, mirroring cdr's
+`DECLARABLE_SERVICE_PURPOSES`, whose reasoning is worth keeping: letting a
+service declare `care` "would turn this from a gate into a bypass". A
+care-delivery read is cdr's clinical read, not this endpoint.
+
+`research` additionally requires `X-Research-Project-Guids` — consent is per
+project, not to research in general — caught in analyse so the error names
+analyse's endpoint rather than surfacing as five identical per-CDR failures.
+
+539 tests pass (was 521). Two existing tests in `test_analyse_aux.py` failed
+correctly on the new 400 and now declare `statistics`; the gate itself is
+covered in `test_purpose_gate.py`, including one test that asserts the header
+actually reaches the fan-out — validating it and then not forwarding it would
+look enforced and filter nothing.
+
+**NOT DEPLOYED.** This changes the contract of two documented production
+endpoints. A caller I could not see would start getting 400s.

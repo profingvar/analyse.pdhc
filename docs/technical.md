@@ -11,6 +11,10 @@ It hosts:
   scatter / trend / CSV-export aggregations), and
 - the **gateway/monitor-facing federated endpoints** (`/api/v1/observations`
   #291; `/api/v1/stats`, `/api/v1/canonical/<table>`, `/api/v1/openehr/*` #292).
+  The two that return a named patient's rows — `canonical` and `openehr` —
+  require a declared `X-Access-Purpose` since #700 and forward it to every
+  CDR's consent gate; see `app/analyse/purpose.py` for why analyse refuses
+  rather than declaring a purpose on the caller's behalf.
 
 It is gated on the **ANALYSIS phase**. The individual / point-of-care half
 (nurse, `/charts`, patient single-view, CDR1 care-delivery reads) lives in
