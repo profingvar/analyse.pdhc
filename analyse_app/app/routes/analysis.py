@@ -92,6 +92,13 @@ def _run(spec: AnalysisSpec) -> tuple[Any, str]:
     return synth.run(spec, sources), "synthetic"
 
 
+def _title_for(r: dict[str, Any], kind: str) -> str:
+    """A chart titled "histogram" tells the reader nothing they cannot see.
+    Prefer the variable the analysis was about."""
+    by = r.get("by_source") or {}
+    return by.get("var") or r.get("var") or kind
+
+
 def _render_result(result, mode: str, lang: str) -> dict[str, Any]:
     """Engine output → what a person reads. This is app/ui's whole purpose."""
     blocks: list[dict[str, Any]] = []
@@ -109,8 +116,14 @@ def _render_result(result, mode: str, lang: str) -> dict[str, Any]:
                 block["sentence"] = sentences.describe_sentence(
                     var, pooled, lang=lang)
             elif kind == "histogram" and pooled.get("bins"):
+                # charts.histogram takes (bins, *, title, y_label) — there is
+                # no lang argument, and passing one raised a TypeError that
+                # the per-block catch turned into "(could not render)". The
+                # chart silently did not appear, which is the fourth thing
+                # #688 sets out to check.
                 block["svg"] = charts.histogram(
-                    pooled["bins"], title=kind, lang=lang)
+                    pooled["bins"], title=_title_for(r, kind),
+                    y_label="patienter" if lang == "sv" else "patients")
         except Exception as e:                       # noqa: BLE001
             # A renderer that raises must not take the whole page with it —
             # the numbers are still correct and the reader should see them.

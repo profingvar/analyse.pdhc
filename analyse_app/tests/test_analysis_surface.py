@@ -129,3 +129,55 @@ class TestItRendersThroughAppUi:
         r = client.post("/analysis/run?format=json", json=_spec())
         assert r.status_code == 200
         assert r.get_json()["blocks"]
+
+
+class TestAChartActuallyRenders:
+    """#688's fourth claim is that charts are server-rendered inline SVG with
+    real text, verified with a screen reader. That cannot be assessed if no
+    chart appears.
+
+    The first version of the surface called `charts.histogram(..., lang=...)`
+    and there is no such parameter, so every histogram raised a TypeError,
+    was caught per block, and silently became "(could not render)". The page
+    looked fine and the chart was simply absent — found while preparing #688,
+    not by a test, which is why this one exists.
+    """
+
+    def _histogram_spec(self):
+        return {
+            "title": "Fördelning", "purpose": "statistics",
+            "sources": ["cdr1", "cdr2", "cdr3"],
+            "cohort": {"include": [{"observation": "x", "op": ">=", "value": 0}]},
+            "variables": [{"name": "matvarde", "from": "x", "agg": "mean"}],
+            "analyses": [{"type": "histogram", "var": "matvarde",
+                          "bins": {"range": [0, 20], "width": 2}}],
+        }
+
+    def test_a_histogram_produces_svg(self, app, client):
+        app.config["ANALYSE_NODES"] = ""
+        app.config["ANALYSE_TRANSPORT_SECRET"] = ""
+        body = client.post("/analysis/run?format=json",
+                           json=self._histogram_spec()).get_json()
+        block = body["blocks"][0]
+        assert block["svg"], f"no chart rendered: {block.get('sentence')}"
+        assert "<svg" in block["svg"]
+
+    def test_the_svg_carries_text_not_just_shapes(self, app, client):
+        """A picture of numbers with no text is unreadable to a screen reader,
+        which is the whole reason these are server-rendered SVG rather than a
+        canvas or an image."""
+        app.config["ANALYSE_NODES"] = ""
+        app.config["ANALYSE_TRANSPORT_SECRET"] = ""
+        svg = client.post("/analysis/run?format=json",
+                          json=self._histogram_spec()).get_json()["blocks"][0]["svg"]
+        assert "<text" in svg, "no text elements — nothing for a reader to read"
+
+    def test_no_renderer_is_called_with_an_argument_it_does_not_take(self, app):
+        """The class of bug this whole section exists for: the call compiled,
+        ran, and failed only at runtime inside a catch."""
+        import inspect
+        from app.ui import charts
+        sig = inspect.signature(charts.histogram)
+        assert "lang" not in sig.parameters, (
+            "charts.histogram gained a lang parameter — update the caller in "
+            "app/routes/analysis.py, which deliberately does not pass one")
