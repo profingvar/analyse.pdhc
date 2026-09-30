@@ -173,6 +173,43 @@ class TestHistogramsAndCounts:
         out = merge_small_bins([("0-1", 20), ("1-2", 1)], P)
         assert len(out) == 1 and out[0][1] == 21
 
+    def test_a_leading_small_bin_merges_forwards(self):
+        """The mirror of the test above, and the one that was missing. The
+        merge loop only ever folds a small bin into out[-1], so the FIRST
+        bin — appended while out was still empty — had nothing to fold into
+        and was published raw. Found 2026-09-30 by a width=2 histogram over
+        the synthetic population, which emitted a bin of 2 against k_min=5."""
+        out = merge_small_bins([("0-2", 2), ("2-4", 30), ("4-6", 40)], P)
+        assert len(out) == 2
+        assert out[0] == ("0-2+2-4", 32)
+        assert all(c >= P.k_min for _, c in out)
+
+    def test_leading_small_bin_cascades_until_it_is_safe(self):
+        """Two small bins at the head, and the one after them is small too:
+        folding once is not enough."""
+        out = merge_small_bins([("a", 1), ("b", 2), ("c", 1), ("d", 30)], P)
+        assert out == [("a+b+c+d", 34)]
+
+    def test_a_lone_bin_below_k_is_suppressed_not_published(self):
+        """Nothing to merge with in either direction. The count cannot be
+        published as a number, so it is not published as a number."""
+        out = merge_small_bins([("0-1", 3)], P)
+        assert out == [("0-1", SUPPRESSED)]
+
+    def test_every_published_bin_is_at_or_above_k(self):
+        """The property the function exists to guarantee, asserted directly
+        rather than via a hand-picked example."""
+        import random
+        rng = random.Random(20260930)
+        for _ in range(500):
+            bins = [(f"b{i}", rng.randint(0, 12)) for i in range(rng.randint(1, 8))]
+            out = merge_small_bins(bins, P)
+            for label, count in out:
+                assert count == SUPPRESSED or count == 0 or count >= P.k_min, (bins, out)
+            kept = sum(c for _, c in out if isinstance(c, int))
+            if all(c != SUPPRESSED for _, c in out):
+                assert kept == sum(c for _, c in bins), (bins, out)
+
     def test_counts_below_k_are_hidden(self):
         out = suppress_counts({"a": 20, "b": 2, "c": 0}, P)
         assert out["a"] == 20 and out["b"] == SUPPRESSED and out["c"] == 0

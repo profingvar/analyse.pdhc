@@ -277,20 +277,48 @@ def merge_small_bins(bins: Sequence[tuple[Any, int]],
 
     Merging rather than dropping: a dropped bin changes the shape of the
     distribution silently, while a merged one keeps every patient in the
-    picture at coarser resolution. A trailing small bin merges backwards, so
-    no patient is lost at either end.
+    picture at coarser resolution.
+
+    The guarantee is that every returned count is ``0``, ``SUPPRESSED``, or
+    at least ``k_min`` — and, unless something was suppressed, that the
+    counts still sum to the input. A bin of zero is left alone: publishing
+    "no patients" discloses nobody.
+
+    Until 2026-09-30 this merged in one direction only, so a small bin at the
+    HEAD of the list — and any small bin sitting directly after a zero bin —
+    was published at its raw count. See ``test_every_published_bin_is_at_or_
+    above_k``, which asserts the guarantee above rather than an example of it.
     """
-    out: list[list[Any]] = []
-    for label, count in bins:
-        if out and 0 < count < policy.k_min:
-            out[-1][1] += count
-            out[-1][0] = f"{out[-1][0]}+{label}"
+    out: list[list[Any]] = [[label, count] for label, count in bins]
+
+    # Merge until no published bin sits below k_min. This is a sweep rather
+    # than a single pass in one direction because a small bin can need either
+    # neighbour: the first bin has no predecessor, the last has no successor,
+    # and a zero bin in between is exempt itself (a published 0 discloses
+    # nothing) while being useless to merge INTO — folding 2 into 0 still
+    # leaves 2 on the page. Each merge shortens the list, so this terminates.
+    while True:
+        small = next(
+            (i for i, (_, c) in enumerate(out) if 0 < c < policy.k_min), None
+        )
+        if small is None:
+            break
+        if len(out) == 1:
+            # Nothing to merge with in either direction. The count cannot be
+            # published as a number at all.
+            out[0][1] = SUPPRESSED
+            break
+        # Prefer folding the successor in, so labels keep reading low-to-high;
+        # at the tail there is no successor, so fold into the predecessor.
+        if small + 1 < len(out):
+            absorbed = out.pop(small + 1)
+            out[small][1] += absorbed[1]
+            out[small][0] = f"{out[small][0]}+{absorbed[0]}"
         else:
-            out.append([label, count])
-    while len(out) > 1 and 0 < out[-1][1] < policy.k_min:
-        tail = out.pop()
-        out[-1][1] += tail[1]
-        out[-1][0] = f"{out[-1][0]}+{tail[0]}"
+            absorbed = out.pop(small)
+            out[small - 1][1] += absorbed[1]
+            out[small - 1][0] = f"{out[small - 1][0]}+{absorbed[0]}"
+
     return [(lbl, cnt) for lbl, cnt in out]
 
 
