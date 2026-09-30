@@ -1534,3 +1534,24 @@ the brief requires, which was written, tested, and never called.
 521 tests pass (was 510). `over_time` still cannot be exercised on synthetic
 data — `synth.build` writes `effective_at: None` — and the page now says so
 instead of silently omitting the analysis.
+
+**#724 / #725 / #726 deployed 2026-09-30 19:10 UTC.** Release
+`2026-09-30T07-50-25Z`, rebuilt image (rollback `f86b4b7175ae`, the #723
+image), predeploy backup `~/backups/predeploy/analyse.pdhc/20260930T190637Z/`.
+All five changed files hashed identically to the local pre-change versions in
+the container beforehand, so there was no server-side divergence.
+
+Verified in the running container against synthetic data, not on disk: `<` and
+`lt` both normalise to `lt` and both now return a `compare_groups` result
+(`<` returned none before); an unknown operator is refused with the list of
+valid ones; the linkage warning and the node's `over_time` explanation both
+reach the page; the frequency table reads `male 6 / female <5` with the
+suppression sentence beside it and no `<k` sentinel. `/healthz` 200
+`database: connected`, no errors in the log.
+
+Note for whoever deploys analyse next: the first rebuild attempt was refused
+by the deploy gate after the files had already been copied into the release
+directory, so for about four minutes the release dir and the running image
+disagreed. That state is harmless — the container runs from its image — but it
+is invisible unless you compare the two, and a rebuild for an unrelated reason
+would have picked up unreviewed code. Copy and rebuild in one authorised step.
