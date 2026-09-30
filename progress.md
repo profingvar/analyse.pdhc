@@ -1351,3 +1351,42 @@ exactly which of the three things is missing instead of a bare 404.
 
 The same applies to `source_clinic_id`: every node policy file needs one
 before that node can run.
+
+## Ticket #714 — app/ui/ has no route, and that blocks #688 (2026-09-30)
+
+#714 asked whether the six-module `app/ui/` package should be wired in or
+recorded as held back. Investigating produced a third answer.
+
+### It is neither orphaned nor superseded
+
+`app/ui/` renders **engine output**: the sentence builders take
+`Result.pooled`, `exactness` and the disclosure `k_min`; `make_recipe` takes an
+`AnalysisSpec`; `aggregates_csv` and `provenance_rows` take a result dict.
+Those shapes come from `app/coordinator/`, and **the coordinator has no web
+route** — it is reached only from `cli_analyse.py`.
+
+`app/routes/researcher.py` is a *different* surface with different inputs: its
+`cohort_histogram` / `boxplot` / `scatter` / `trend` endpoints read rows fanned
+out through `CdrRegistry`. The two are not interchangeable. Wiring this package
+into that route would hand it a shape it does not accept — so "just import it
+somewhere" was never available.
+
+### The consequence nobody had noticed
+
+**#688 is the Phase 3 usability acceptance for these exact modules**
+(#655–#658). It says it follows the deploy ticket, and #685 is now done — so
+the next person to pick up #688 would have found there is nothing to walk a
+user through. Its four claims (cards as questions, method derived not chosen,
+suppressed cells reading as protected, SVG verified with a screen reader) all
+require a rendered page.
+
+Filed as **#722**, and #688 is blocked on it.
+
+### Recorded where it will be read
+
+The reasoning now lives in `app/ui/__init__.py`, not only in a ticket, so the
+next dead-code sweep reads it instead of re-reporting fifteen functions — the
+same treatment as `require_organisation` in sso (#707) and the superseded
+spärr helpers in `ips_client` (#709).
+
+493 tests unchanged; this is documentation, not behaviour.
