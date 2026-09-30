@@ -1133,3 +1133,78 @@ every patient counts as blocked. Verified, not assumed.
 Removing superseded safety code is a deliberate act for whoever owns the spärr
 model, not a tidy-up. A note now sits in `ips_client.py`'s module docstring
 saying so, so the next sweep reads the reasoning instead of re-raising them.
+
+## #715 — the node dispatch never selected rows by variable (2026-09-30)
+
+Found while implementing #713, which I had filed with the wrong diagnosis.
+
+Rows arrive **long** — one per observation, `concept` naming the variable —
+because `projection.py` is explicit that "the concept selects which rows, it
+is not a field of its own". Every engine expects **wide** per-patient records:
+`completeness` reads `r.get(variable_name)`, `correlation` takes
+`columns: dict[name, values]`, `compare_groups` takes `groups: dict[name,
+values]`. **Nothing bridged the two.**
+
+Measured before the fix, on a dataset where variable `a` had 10 rows (0–9) and
+`b` had 10 (0–18):
+
+| analysis | was | should be |
+|---|---|---|
+| `describe(vars=["a"])` | **n = 20**, sum 135 | n = 10, sum 45 |
+| `frequency(vars=["a"])` | counts ran past 9 into b's range | ten counts of 1 |
+| `histogram(var="a")` | 20 rows binned | 10 |
+| `correlation(["a","b"])` | **n = 0**, all sums 0.0 | n = 10 |
+| compare_groups / completeness / over_time | `None`, silently | a partial |
+
+`correlation` was the worst: a well-formed Partial over nothing, which the
+coordinator merges and finalizes into something a researcher reads as real.
+
+### The fix — a pivot, not new semantics
+
+`app/node/frame.py` builds one wide record per patient. **The collapse rules
+were already specified and are not invented here:** `Agg`'s own docstring is
+"how repeated observations collapse to one value per patient", `agg` is
+mandatory for an observation series and forbidden for `demographics.*` /
+`meta.*`, and `completeness` defines a patient with no qualifying observation
+as *present with a null* — the only way absence can be measured at all.
+
+Four choices the spec left open, all decided toward "absence is None", which
+composes with what `completeness` already counts:
+
+- `count` of nothing is **0** — a count of nothing really is zero.
+- `slope` with fewer than two points is **None** — undefined.
+- `time_to_first_event` with no event is **None**. Treating it as day 0 would
+  put every never-affected patient at the far left of a survival curve.
+- `window_days` is **inclusive at both ends** — "days 0–30" is how a clinician
+  writes it.
+
+`over_time` is the one engine that keeps the long rows: it plots observations
+against time, so collapsing per patient first would destroy the thing drawn.
+
+### No more silent skips
+
+Every path that yields no partial now appends a note: an unimplemented type, a
+`DispatchError` with its reason, or a bare `None`. A missing number with no
+explanation is worse than an error — the researcher cannot tell a suppressed
+result from one that was never computed.
+
+Group membership treats a record missing the predicate's variable as **not a
+member**. Absence is not a failed comparison; the other reading would move
+every incompletely-recorded patient into the opposite group silently.
+
+### 482 tests (was 467)
+
+`tests/test_frame.py` asserts the defect in the exact shape it took, plus the
+invariant: **every type the spec can express either produces a partial or an
+explanation.** Verified to have teeth — removing one dispatch branch makes it
+fail.
+
+Worth noting all 467 tests passed before *and* after the fix. None of them
+exercised the dispatch with more than one concept, which is precisely why this
+survived.
+
+### Still open
+
+`linear_regression` and `kaplan_meier` are in the engine REGISTRY but **not in
+the spec's `Analysis` union**, so no spec can request them. Ahead of the spec
+rather than broken; exposing them is a separate decision.
