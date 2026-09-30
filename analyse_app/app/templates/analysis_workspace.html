@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analys · analyse.pdhc</title>
+<style>
+  :root { --border:#d9dde3; --card-bg:#fff; --primary:#2a6ebb; --muted:#667;
+          --warn-bg:#fff8e1; --warn-br:#e0a800; }
+  * { box-sizing:border-box; }
+  body { font-family:system-ui,-apple-system,sans-serif; margin:0; background:#f5f6f8; color:#1a1d21; }
+  header { display:flex; align-items:center; justify-content:space-between;
+           padding:.7rem 1.2rem; background:#fff; border-bottom:1px solid var(--border); }
+  header h1 { font-size:1.05rem; margin:0; }
+  main { max-width:60rem; margin:1.2rem auto; padding:0 1rem; }
+  button { font:inherit; padding:.45rem .9rem; border:1px solid var(--primary);
+           background:var(--primary); color:#fff; border-radius:4px; cursor:pointer; }
+  .card { background:var(--card-bg); border:1px solid var(--border); border-radius:6px;
+          padding:.9rem 1.1rem; margin-bottom:1rem; }
+  .card h2 { font-size:1rem; margin:0 0 .5rem; }
+  .muted { color:var(--muted); font-size:.88rem; }
+  textarea { width:100%; min-height:14rem; font:.85rem ui-monospace,Menlo,monospace;
+             border:1px solid var(--border); border-radius:4px; padding:.6rem; }
+  .banner { border-left:4px solid var(--warn-br); background:var(--warn-bg);
+            padding:.7rem .9rem; border-radius:4px; margin-bottom:1rem; }
+  code { background:#eef1f5; padding:.1rem .3rem; border-radius:3px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Analys</h1>
+  <span class="muted">analyse.pdhc</span>
+</header>
+<main>
+
+  {% if live %}
+    <div class="card">
+      <h2>Riktiga källor</h2>
+      <p class="muted">Frågan skickas till {{ sources|length }} nod(er):
+        {{ sources|join(', ') }}. Varje nod svarar med sammanräknade tal —
+        inga patientrader lämnar källan.</p>
+    </div>
+  {% else %}
+    <div class="banner">
+      <strong>Syntetiska data.</strong> Inga noder är konfigurerade, så frågan
+      körs mot {{ synth_nodes }} genererade källor med {{ synth_patients }}
+      patienter var. Det är <em>samma</em> analyskod som mot riktiga data —
+      bara underlaget är påhittat. Varje svar märks som syntetiskt.
+    </div>
+  {% endif %}
+
+  <form class="card" method="post" action="{{ url_for('analysis.run') }}">
+    <h2>Fråga</h2>
+    <p class="muted">En analysspecifikation. Den valideras innan något körs, och
+       felmeddelandet säger vad som saknas — inte bara att den är ogiltig.</p>
+    <textarea name="spec" spellcheck="false">{{ example }}</textarea>
+    <p style="margin:.7rem 0 0"><button type="submit">Kör analysen</button></p>
+  </form>
+
+</main>
+</body>
+</html>

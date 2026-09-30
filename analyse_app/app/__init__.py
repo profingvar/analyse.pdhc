@@ -169,6 +169,11 @@ def create_app(config=None) -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(views_bp)
     app.register_blueprint(researcher_bp)
+    # #722 — the coordinator's web surface. app/ui/ (Phase 3, #655-#658) was
+    # built, tested and reachable by nothing because the coordinator had only
+    # a CLI; #688's usability acceptance could not be performed at all.
+    from app.routes.analysis import bp as analysis_bp
+    app.register_blueprint(analysis_bp)
     app.register_blueprint(observations_search_bp)
     app.register_blueprint(analyse_stats_bp)
     app.register_blueprint(analyse_canonical_bp)

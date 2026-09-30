@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ spec.title }} · analyse.pdhc</title>
+<style>
+  :root { --border:#d9dde3; --primary:#2a6ebb; --muted:#667;
+          --warn-bg:#fff8e1; --warn-br:#e0a800; }
+  * { box-sizing:border-box; }
+  body { font-family:system-ui,-apple-system,sans-serif; margin:0; background:#f5f6f8; color:#1a1d21; }
+  header { display:flex; align-items:center; justify-content:space-between;
+           padding:.7rem 1.2rem; background:#fff; border-bottom:1px solid var(--border); }
+  header h1 { font-size:1.05rem; margin:0; }
+  header a { color:var(--primary); text-decoration:none; font-size:.9rem; }
+  main { max-width:60rem; margin:1.2rem auto; padding:0 1rem; }
+  .card { background:#fff; border:1px solid var(--border); border-radius:6px;
+          padding:.9rem 1.1rem; margin-bottom:1rem; }
+  .card h2 { font-size:1rem; margin:0 0 .5rem; }
+  .muted { color:var(--muted); font-size:.88rem; }
+  .banner { border-left:4px solid var(--warn-br); background:var(--warn-bg);
+            padding:.7rem .9rem; border-radius:4px; margin-bottom:1rem; }
+  .sentence { font-size:1.05rem; margin:.3rem 0 .6rem; }
+  table { width:100%; border-collapse:collapse; font-size:.9rem; }
+  td, th { padding:.3rem .4rem; border-bottom:1px solid #eee; text-align:left; }
+  svg { max-width:100%; height:auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>{{ spec.title }}</h1>
+  <a href="{{ url_for('analysis.workspace') }}">← Ny fråga</a>
+</header>
+<main>
+
+  {% if mode == 'synthetic' %}
+    <div class="banner">
+      <strong>Syntetiska data.</strong> Talen nedan är räknade av samma
+      analyskod som används mot riktiga källor, men underlaget är genererat.
+      De beskriver inga verkliga patienter.
+    </div>
+  {% endif %}
+
+  {% for b in blocks %}
+    <div class="card">
+      <h2>{{ b.kind }}</h2>
+      {% if b.sentence %}<p class="sentence">{{ b.sentence }}</p>{% endif %}
+      {% if b.svg %}{{ b.svg|safe }}{% endif %}
+      {% if b.exactness %}<p class="muted">{{ b.exactness }}</p>{% endif %}
+    </div>
+  {% else %}
+    <div class="card"><p class="muted">Analysen gav inget resultat.</p></div>
+  {% endfor %}
+
+  <div class="card">
+    <h2>Källor</h2>
+    <table>
+      <tr><th>Källa</th><th>Svarade</th><th>Patienter</th></tr>
+      {% for s in sources %}
+        <tr><td>{{ s.source }}</td>
+            <td>{{ 'ja' if s.ok else 'nej' }}</td>
+            <td>{{ s.n_patients }}</td></tr>
+      {% endfor %}
+    </table>
+    <p class="muted">En källa som inte svarade försämrar den källan — den
+       gör inte hela körningen ogiltig, och den räknas inte som noll.</p>
+  </div>
+
+  <div class="card">
+    <h2>Härkomst</h2>
+    <table>
+      {% for k, v in provenance %}<tr><th>{{ k }}</th><td>{{ v }}</td></tr>{% endfor %}
+    </table>
+  </div>
+
+</main>
+</body>
+</html>

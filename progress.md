@@ -1390,3 +1390,57 @@ same treatment as `require_organisation` in sso (#707) and the superseded
 spärr helpers in `ips_client` (#709).
 
 493 tests unchanged; this is documentation, not behaviour.
+
+## Ticket #722 — the coordinator now has a web surface (2026-09-30)
+
+`app/ui/` (Phase 3, #655–#658) was built, tested and reachable by nothing,
+because it renders engine output and the coordinator had only a CLI. #714
+found that; this is the page.
+
+`GET /analysis` and `POST /analysis/run`, plus an aggregates-only CSV export,
+all behind `researcher_required` like the cohort routes.
+
+### Two paths, and the page always says which
+
+- **Configured nodes** — when `ANALYSE_NODES` *and* `ANALYSE_TRANSPORT_SECRET`
+  are both set, the spec is fanned out for real.
+- **Synthetic** — otherwise. `app/testing/synth` drives the **real** node and
+  coordinator code over generated data; it is not a mock of the engine, it is
+  the engine over data nobody's health depends on.
+
+Synthetic is the honest default rather than an error page: the brief makes
+`data_mode: synthetic` the default everywhere, and #688's questions — are the
+cards answerable, is the method derived not chosen, does `<5` read as
+protected — need a rendered page, not real patients.
+
+**Both conditions are required for "live".** Nodes alone do not count, because
+the transport secret has no default by design: one that fell back to a
+development constant would ship working and attest nothing.
+
+### The property that mattered most, and a real gap it exposed
+
+A synthetic run must never be mistaken for a real one. The page carries a
+banner — but a banner can be screenshotted away from its numbers, so the mode
+belongs in the **provenance**, which travels into the CSV and any report.
+
+`provenance_rows()` mapped known keys to labels and **silently dropped
+unknown ones**, so `data_mode` never reached the reader. Fixed in
+`app/ui/recipes.py`: "Data" is now the *first* provenance row and spells the
+value out — "SYNTHETIC — generated data, no real patients" — rather than
+passing a codeword through.
+
+### One thing that would have made a poor first impression
+
+The example spec on the page originally used `systolic`; the synthetic
+generator writes `concept: "x"`. It validated, ran, and returned **nothing** —
+a page whose own example produces no answer teaches the reader that the tool
+does not work. The example now uses the synthetic vocabulary, with a comment
+saying why.
+
+### Rendering failures do not lose the numbers
+
+A sentence template that raises is caught per block, so correct figures are
+not discarded for a cosmetic reason. Asserted by a test that makes
+`describe_sentence` throw.
+
+503 tests (was 493). **#688 is now performable** — it was not before.

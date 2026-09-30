@@ -95,10 +95,23 @@ def _flatten(obj: Any, prefix: str = "") -> list[tuple[str, Any]]:
     return out
 
 
+#: Spelled out rather than passed through, so a reader who does not know the
+#: codeword still learns what they are looking at.
+_DATA_MODE = {
+    "live": "real sources",
+    "synthetic": "SYNTHETIC — generated data, no real patients",
+}
+
+
 def provenance_rows(result: dict[str, Any]) -> list[tuple[str, str]]:
     """What a report must carry to be traceable, in display order."""
     p = result.get("provenance", {})
     rows = [
+        # #722: FIRST, and not optional. A run against generated data and one
+        # against patients must never be told apart only by a banner on the
+        # page — provenance travels with the numbers into a CSV, a report or
+        # a screenshot, and the banner does not.
+        ("Data", _DATA_MODE.get(p.get("data_mode"), "not recorded")),
         ("Spec hash", p.get("spec_hash", "–")),
         ("Purpose", p.get("purpose", "–")),
         ("Linkage", p.get("linkage", "–")),
