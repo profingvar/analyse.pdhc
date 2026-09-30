@@ -244,3 +244,10 @@
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_phase4.py
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/analyse/analysis-spec-v1.schema.json (regenerated)
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/analyse/decisions/0010-keyed-hash-linkage.md (RETIRED)
+
+## 2026-09-30 — #723 disclosure fix, #724 walkthrough specs
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/privacy/disclosure.py
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_disclosure.py
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/walkthrough_688/README.md
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/walkthrough_688/01_suppression.json
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/walkthrough_688/02_suppression_total.json

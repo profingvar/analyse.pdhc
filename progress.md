@@ -1444,3 +1444,45 @@ not discarded for a cosmetic reason. Asserted by a test that makes
 `describe_sentence` throw.
 
 503 tests (was 493). **#688 is now performable** — it was not before.
+
+## 2026-09-30 — #688 walkthrough: suppression specs, and two defects behind them
+
+Asked for a spec that forces suppression, since every shipped example returns
+comfortable numbers and nothing on the page ever crossed `k_min`. Two specs are
+now in `docs/walkthrough_688/`, verified against the synthetic population.
+
+Building them found two things.
+
+**#723 — histogram bins below `k_min` could reach the page. FIXED, NOT DEPLOYED.**
+A `width=2` histogram published a first bin of 2 patients against `k_min=5`.
+`merge_small_bins` folded a small bin into `out[-1]` only, so the first bin —
+appended while `out` was empty — went out at its raw count whenever the bin
+after it was large enough not to merge. A property test over 500 random bin
+sets then found a second case: a zero bin is exempt from merging (publishing
+"no patients" discloses nobody) but was still eligible to be merged *into*, and
+folding 2 into 0 leaves 2 on the page. Replaced with a converging sweep; a lone
+bin below `k_min` now becomes `SUPPRESSED` rather than a number. 510 tests pass.
+The docstring had promised "no patient is lost at either end" — one end was
+implemented.
+
+The two existing tests covered a middle bin and a trailing bin. Neither end
+case was covered, which is exactly why neither was caught; the new test asserts
+the guarantee over random input rather than adding a third example.
+
+**#724 — the page renders 2 of 7 analysis kinds.** `_render_result` handles
+`describe` and `histogram`. `frequency` — the kind that demonstrates
+suppression — renders as a card with its heading, no counts, and the single
+line "Siffrorna är exakta även när flera källor kombineras". On the card where
+a category was withheld, the only sentence tells the reader the figures are
+exact and shows none. `sentences.suppression_sentence(k_min, lang)` exists,
+tested, with no call site outside `app/ui/`. So do `comparison_sentence`,
+`linkage_sentence`, `charts.data_table`, `heatmap` and `curve`.
+
+This is #714 one layer in: #714 found `app/ui` had no route, #722 gave it one
+and wired two kinds. #688's usability question cannot be answered until #724 is
+done — the walkthrough would be assessing a page that does not show its most
+important output.
+
+**Open for the operator:** #723 is committed locally and not deployed. It is a
+disclosure fix on a live surface; deploying is a state change on the mini that
+was not part of the greenlit task.

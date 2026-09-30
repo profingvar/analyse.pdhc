@@ -1,0 +1,17 @@
+{
+  "spec_version": 1,
+  "title": "Kön bland patienter med högt mätvärde",
+  "purpose": "statistics",
+  "sources": ["cdr1", "cdr2", "cdr3"],
+  "cohort": {
+    "include": [{"observation": "x", "op": ">=", "value": 18}]
+  },
+  "variables": [
+    {"name": "matvarde", "from": "x", "agg": "max"},
+    {"name": "kon", "from": "demographics.sex"}
+  ],
+  "analyses": [
+    {"type": "describe", "vars": ["matvarde"]},
+    {"type": "frequency", "vars": ["kon"]}
+  ]
+}
