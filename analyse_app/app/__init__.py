@@ -74,7 +74,9 @@ def create_app(config=None) -> Flask:
 
     # --- Inbound service-key callers (KNOWN_SERVICES) ---------------------
     # gateway.pdhc (#291) + monitor.pdhc (#292) call the federated endpoints
-    # service-to-service; each presents its OWN key.
+    # service-to-service; each presents its OWN key. monitor.pdhc is a test
+    # identity, not a service, and since #727 reaches /api/v1/stats only
+    # (app/analyse/callers.py).
     app.config.setdefault(
         "GATEWAY_PDHC_SERVICE_KEY",
         os.environ.get("GATEWAY_PDHC_SERVICE_KEY", ""))

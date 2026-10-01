@@ -28,6 +28,7 @@ from __future__ import annotations
 from flask import Blueprint, current_app, jsonify, request, g
 
 from app.analyse.federation import CdrRegistry, fanout
+from app.analyse.callers import PATIENT_DATA_CALLERS, caller_check
 from app.analyse.purpose import purpose_headers
 
 
@@ -39,10 +40,9 @@ _ALLOWED_TABLES = {"health_observations", "activities"}
 @bp.get("/api/v1/canonical/<table_name>")
 def query_table(table_name):
     blob = getattr(g, "access_blob", None) or {}
-    if not blob.get("service_source"):
-        return jsonify({"error": "service-key auth required"}), 401
-    if blob.get("service_source") not in {"gateway.pdhc", "monitor.pdhc"}:
-        return jsonify({"error": "source service not allowed for this endpoint"}), 403
+    err = caller_check(blob, PATIENT_DATA_CALLERS)
+    if err:
+        return jsonify(err[0]), err[1]
 
     if table_name not in _ALLOWED_TABLES:
         return jsonify({"error": f"unknown table: {table_name}"}), 404

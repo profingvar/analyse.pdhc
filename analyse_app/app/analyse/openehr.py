@@ -23,6 +23,7 @@ from __future__ import annotations
 from flask import Blueprint, current_app, jsonify, request, g
 
 from app.analyse.federation import CdrRegistry, fanout
+from app.analyse.callers import PATIENT_DATA_CALLERS, caller_check
 from app.analyse.purpose import purpose_headers
 
 
@@ -30,11 +31,8 @@ bp = Blueprint("analyse_openehr", __name__)
 
 
 def _auth_ok(blob: dict) -> tuple[bool, tuple[dict, int] | None]:
-    if not blob.get("service_source"):
-        return False, ({"error": "service-key auth required"}, 401)
-    if blob.get("service_source") not in {"gateway.pdhc", "monitor.pdhc"}:
-        return False, ({"error": "source service not allowed for this endpoint"}, 403)
-    return True, None
+    err = caller_check(blob, PATIENT_DATA_CALLERS)
+    return (False, err) if err else (True, None)
 
 
 def _federated_search(path: str, params: dict, registry: CdrRegistry,

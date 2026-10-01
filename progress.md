@@ -1605,3 +1605,54 @@ look enforced and filter nothing.
 
 **NOT DEPLOYED.** This changes the contract of two documented production
 endpoints. A caller I could not see would start getting 400s.
+
+## 2026-10-01 — #727 (part 1 of 2): monitor.pdhc narrowed to the aggregate endpoint
+
+`monitor.pdhc` is **not a service**. It is a synthetic service-key identity
+created 2026-04-28 so the Playwright (F2), perf, stats (F3) and chaos (F4)
+suites could bypass SSO — documented only in `plans/*_2026-04-28.md`, with no
+repo, no container and no port. Its key material
+(`~/.secrets/monitor_pdhc_service_key`, created 28 Apr) has never been rotated,
+and `MONITOR_PDHC_SERVICE_KEY` is **set in the production analyse container**.
+
+It was allowlisted on all four federated endpoints — three of which fan a named
+patient's rows out of every CDR. Not by decision: the allowlist was the literal
+`{"gateway.pdhc", "monitor.pdhc"}`, written once and hand-copied into
+`canonical.py`, `openehr.py`, `observations_search.py` and `stats.py`. The same
+shape #726 found in the operator vocabulary, except the thing being duplicated
+here is an authorisation list. **It had no test of any kind** — nothing
+asserted either name was on it, or that anything else was off it.
+
+Single-sourced into `app/analyse/callers.py`, split by what the endpoint
+returns rather than by how much the caller is trusted:
+
+- `PATIENT_DATA_CALLERS = {gateway.pdhc}` — canonical, openehr, observations.
+- `AGGREGATE_CALLERS = {gateway.pdhc, monitor.pdhc}` — stats.
+
+A monitoring identity needs to know the CDRs are answering and roughly how much
+they hold; it has never needed a named patient's observations.
+
+### Why only part 1
+
+The remaining half of #727 — dropping it from `KNOWN_SERVICES`, unsetting
+`MONITOR_PDHC_SERVICE_KEY` on the hosts, rotating — **can break an unknown
+caller**, and the open question (does anything outside these repos still use
+that key — a CI runner, an ops script?) is unanswered. Nothing in the tree
+consumes it; the only remaining Playwright harness is `dashboard.pdhc/e2e/`,
+and dashboard.pdhc is what #462 supersedes. Narrowing is correct under *either*
+answer, so it does not wait for one. Removal does.
+
+### Relationship to #700
+
+Neither resolves the other, and they should deploy together. #700 constrains
+*what a caller may declare*; #727 constrains *who may call at all*. Deploying
+#700 alone leaves this identity reading patient rows platform-wide, merely
+consent-filtered. A caller must now pass both gates.
+
+546 tests pass (was 539). `tests/test_caller_allowlist.py` is new: the
+narrowing on all four endpoints, that gateway is untouched, that the 403 body
+names neither caller, that a missing key is 401 rather than an allowlist miss,
+and one test that fails if a route ever spells the literal out again.
+
+**NOT DEPLOYED** — held with #700 per the standing instruction, and because the
+pair belongs in one authorised step.

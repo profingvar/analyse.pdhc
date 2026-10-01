@@ -28,6 +28,7 @@ from __future__ import annotations
 from flask import Blueprint, current_app, jsonify, g
 
 from app.analyse.federation import CdrRegistry, fanout
+from app.analyse.callers import AGGREGATE_CALLERS, caller_check
 
 
 bp = Blueprint("analyse_stats", __name__)
@@ -45,10 +46,9 @@ _COUNT_KEYS = (
 @bp.get("/api/v1/stats")
 def federated_stats():
     blob = getattr(g, "access_blob", None) or {}
-    if not blob.get("service_source"):
-        return jsonify({"error": "service-key auth required"}), 401
-    if blob.get("service_source") not in {"gateway.pdhc", "monitor.pdhc"}:
-        return jsonify({"error": "source service not allowed for this endpoint"}), 403
+    err = caller_check(blob, AGGREGATE_CALLERS)
+    if err:
+        return jsonify(err[0]), err[1]
 
     registry = CdrRegistry.from_config(current_app.config)
     totals = {k: 0 for k in _COUNT_KEYS}

@@ -40,6 +40,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, current_app, jsonify, request, g
 
 from app.analyse.federation import CdrRegistry, fanout
+from app.analyse.callers import PATIENT_DATA_CALLERS, caller_check
 
 
 bp = Blueprint("observations_search", __name__)
@@ -87,10 +88,9 @@ def search_observations():
     # app.auth. We just check the caller landed in the service-key
     # path — anything else (SSO session, dev mode) is a misroute.
     blob = getattr(g, "access_blob", None) or {}
-    if not blob.get("service_source"):
-        return jsonify({"error": "service-key auth required"}), 401
-    if blob.get("service_source") not in {"gateway.pdhc", "monitor.pdhc"}:
-        return jsonify({"error": "source service not allowed for this endpoint"}), 403
+    err = caller_check(blob, PATIENT_DATA_CALLERS)
+    if err:
+        return jsonify(err[0]), err[1]
 
     sr_guids = [s.strip() for s in request.args.getlist("service_request")
                 if s.strip()]

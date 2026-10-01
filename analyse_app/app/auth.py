@@ -16,8 +16,8 @@ AUTH_MODE=sso  → OAuth-style flow against sso.pdhc, mirroring gateway.pdhc /
                  so an SSO-side logout locks the caller out immediately.
 
 Service-key bypass (KNOWN_SERVICES): gateway.pdhc (#291 — its
-``/api/v1/observations`` proxy) and monitor.pdhc (#292 — benchmarks/smoke)
-call the analyse-layer federated endpoints service-to-service with
+``/api/v1/observations`` proxy) and monitor.pdhc (#292 — benchmarks/smoke;
+**not a service**, see below) call the analyse-layer federated endpoints with
 ``X-Source-Service`` + ``X-Service-Key``. Each presents its OWN key
 (GATEWAY_PDHC_SERVICE_KEY / MONITOR_PDHC_SERVICE_KEY). analyse's own outbound
 identity to CDR2–6 is ``ANALYSE_PDHC_SERVICE_KEY`` (used by analyse/federation).
@@ -197,7 +197,13 @@ def _public_path(path: str) -> bool:
 # federated endpoints (observations_search/stats/canonical/openehr) without an
 # SSO session. Each presents its OWN key.
 #   gateway.pdhc — #291, its /api/v1/observations proxy lands here.
-#   monitor.pdhc — #292, benchmarks / smoke / CI.
+#   monitor.pdhc — #292, benchmarks / smoke / CI. NOT A SERVICE: a synthetic
+#     service-key identity created 2026-04-28 so the Playwright/perf/chaos
+#     suites could bypass SSO (plans/*_2026-04-28.md). Being in this dict only
+#     authenticates it; WHICH endpoints it may reach is app/analyse/callers.py,
+#     where #727 narrowed it to /api/v1/stats. Removing it from here entirely
+#     is the rest of #727 and waits on whether anything outside the repos
+#     still calls with that key.
 KNOWN_SERVICES = {
     "monitor.pdhc": "MONITOR_PDHC_SERVICE_KEY",
     "gateway.pdhc": "GATEWAY_PDHC_SERVICE_KEY",

@@ -27,6 +27,7 @@ browser ──SSO login──▶ /auth/login → sso.pdhc → /auth/callback (se
                         │
 gateway.pdhc ──svc-key──┤ before_request loader (app/auth.py)
 monitor.pdhc ──svc-key──┤   • service-key   → service blob (service_source)
+                        │     (monitor.pdhc: /api/v1/stats only — #727)
                         │   • AUTH_MODE=off  → dev-SU blob
                         │   • AUTH_MODE=sso  → re-validate bearer every request
                         ▼   • gate: has_analysis_access (SU OR prof+analysis)
@@ -50,12 +51,41 @@ monitor.pdhc ──svc-key──┤   • service-key   → service blob (servic
   cache) → `has_analysis_access` gate.
 - `KNOWN_SERVICES = {monitor.pdhc: MONITOR_PDHC_SERVICE_KEY,
   gateway.pdhc: GATEWAY_PDHC_SERVICE_KEY}` — each sibling presents its own key.
+  This dict decides **who authenticates**, not what they may read; see
+  `app/analyse/callers.py` for the latter (#727).
   Service callers get a machine blob with `service_source` set and NO clinical
   roles / admin bit, so they can reach ONLY the federated `/api/v1/*` endpoints
   (which self-gate on `service_source`); the researcher UI (`researcher_required`)
   needs a real operator session.
 - `ANALYSE_PDHC_SERVICE_KEY` is analyse's OWN outbound identity to CDR2–6 (set
   in the federation fanout), distinct from the inbound keys above.
+
+### Caller allowlists (app/analyse/callers.py) — #727
+`KNOWN_SERVICES` decides **who authenticates**. This module decides **which
+endpoints each authenticated caller may reach**, split by what the endpoint
+returns rather than by how much the caller is trusted:
+
+| Set | Endpoints | Members |
+|---|---|---|
+| `PATIENT_DATA_CALLERS` | `/api/v1/canonical/<table>`, `/api/v1/openehr/*`, `/api/v1/observations` — all fan a **named patient's** rows out of every CDR | `gateway.pdhc` |
+| `AGGREGATE_CALLERS` | `/api/v1/stats` — per-CDR row counts, nothing patient-identifying | `gateway.pdhc`, `monitor.pdhc` |
+
+`caller_check(blob, allowed)` returns `None` to proceed or `(payload, status)`
+— 401 when there is no `service_source` at all, 403 when it is not on the list.
+The 403 body is identical either way, so a rejected caller learns that it is
+not allowed here and nothing about who is.
+
+Before #727 this was one literal, `{"gateway.pdhc", "monitor.pdhc"}`, hand-copied
+into all four route modules with no test of any kind. `monitor.pdhc` is **not a
+service**: it is a synthetic service-key identity created 2026-04-28 so the
+Playwright, perf and chaos suites could bypass SSO (`plans/*_2026-04-28.md`). It
+had patient-data access because the list was copied, not because anything asked
+for it. Dropping it from `KNOWN_SERVICES`, unsetting `MONITOR_PDHC_SERVICE_KEY`
+and rotating is the rest of #727, pending confirmation that nothing outside
+these repos still calls with that key.
+
+This is orthogonal to `app/analyse/purpose.py` (#700): that constrains **what**
+a caller may declare it is reading for. A caller must pass both.
 
 ### Web login (app/routes/auth.py, ported from dashboard.pdhc)
 `/auth/login` → sso.pdhc (anti-CSRF `state`), `/auth/callback` validates the

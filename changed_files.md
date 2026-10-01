@@ -251,3 +251,15 @@
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/walkthrough_688/README.md
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/walkthrough_688/01_suppression.json
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/walkthrough_688/02_suppression_total.json
+
+## 2026-10-01 — #727 part 1: narrow monitor.pdhc to /api/v1/stats
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/analyse/callers.py — NEW. Single source for the caller allowlists: PATIENT_DATA_CALLERS (gateway only) vs AGGREGATE_CALLERS (gateway + monitor), plus caller_check(). Records why monitor.pdhc is a test identity and why removal waits while narrowing does not.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/analyse/canonical.py — allowlist literal replaced by caller_check(blob, PATIENT_DATA_CALLERS).
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/analyse/openehr.py — same, via _auth_ok.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/analyse/observations_search.py — same.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/analyse/stats.py — same, but AGGREGATE_CALLERS: monitor.pdhc keeps this one endpoint.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_caller_allowlist.py — NEW, 7 tests. The allowlist had none before.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/auth.py — KNOWN_SERVICES comment records monitor.pdhc as a non-service test identity and points at callers.py for what it may reach.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/__init__.py — same note at the config site.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/.env.example — MONITOR_PDHC_SERVICE_KEY marked as a test identity, leave unset unless a harness needs it.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/technical.md — new "Caller allowlists" section + diagram annotation; KNOWN_SERVICES bullet now says it decides who authenticates, not what they may read.
