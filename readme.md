@@ -58,9 +58,8 @@ half from dashboard(cd-assist).
 - `POST/GET /api/cohort`, `/api/cohort/<id>/{histogram,boxplot,scatter,trend,export}`
   — researcher cohort engine (analysis-phase, `researcher_required`, audited).
 - `/api/v1/observations` (#291, `gateway.pdhc` service-key).
-- `/api/v1/stats` (#292, `gateway.pdhc` or `monitor.pdhc` service-key). Row
-  counts per table only — no patient rows, so no read purpose is required, and
-  it is the one endpoint `monitor.pdhc` may still reach (#727).
+- `/api/v1/stats` (#292, `gateway.pdhc` service-key). Row counts per table
+  only — no patient rows, so no read purpose is required.
 - `/api/v1/canonical/<table>`, `/api/v1/openehr/*` (#292, `gateway.pdhc`
   service-key **plus a declared read purpose**). These return a named patient's
   rows from every CDR,
@@ -74,9 +73,9 @@ half from dashboard(cd-assist).
 
 Who may call which of these lives in one place, `app/analyse/callers.py`
 (#727) — separate from `KNOWN_SERVICES`, which only decides who authenticates.
-`monitor.pdhc` is a synthetic test identity (Playwright/perf/chaos, 2026-04-28),
-not a service; it was allowlisted on the patient-data endpoints by copy-paste
-and is now confined to `/api/v1/stats`.
+`gateway.pdhc` is the only caller of either. `monitor.pdhc` was a synthetic test
+identity (Playwright/perf/chaos, 2026-04-28), not a service; it had been
+allowlisted on the patient-data endpoints by copy-paste and #727 removed it.
 
 ## What is NOT here (belongs to cd-assist)
 Nurse single-patient views, `/charts`, CDR1 care-delivery reads, patient picker,

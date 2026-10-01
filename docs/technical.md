@@ -26,8 +26,7 @@ cd-assist (host `dashboard.pdhc.se`, unchanged) and is deliberately absent here.
 browser ──SSO login──▶ /auth/login → sso.pdhc → /auth/callback (session token)
                         │
 gateway.pdhc ──svc-key──┤ before_request loader (app/auth.py)
-monitor.pdhc ──svc-key──┤   • service-key   → service blob (service_source)
-                        │     (monitor.pdhc: /api/v1/stats only — #727)
+                        │   • service-key   → service blob (service_source)
                         │   • AUTH_MODE=off  → dev-SU blob
                         │   • AUTH_MODE=sso  → re-validate bearer every request
                         ▼   • gate: has_analysis_access (SU OR prof+analysis)
@@ -49,10 +48,10 @@ monitor.pdhc ──svc-key──┤   • service-key   → service blob (servic
   (`KNOWN_SERVICES`) → `AUTH_MODE=off` dev-SU → SSO bearer **re-validated on
   every request** against sso.pdhc `/api/auth/me/service` (Rule 11, no blob
   cache) → `has_analysis_access` gate.
-- `KNOWN_SERVICES = {monitor.pdhc: MONITOR_PDHC_SERVICE_KEY,
-  gateway.pdhc: GATEWAY_PDHC_SERVICE_KEY}` — each sibling presents its own key.
-  This dict decides **who authenticates**, not what they may read; see
-  `app/analyse/callers.py` for the latter (#727).
+- `KNOWN_SERVICES = {gateway.pdhc: GATEWAY_PDHC_SERVICE_KEY}` — each sibling
+  presents its own key. This dict decides **who authenticates**, not what they
+  may read; see `app/analyse/callers.py` for the latter. `monitor.pdhc` was the
+  second entry until #727 removed it.
   Service callers get a machine blob with `service_source` set and NO clinical
   roles / admin bit, so they can reach ONLY the federated `/api/v1/*` endpoints
   (which self-gate on `service_source`); the researcher UI (`researcher_required`)
@@ -68,7 +67,14 @@ returns rather than by how much the caller is trusted:
 | Set | Endpoints | Members |
 |---|---|---|
 | `PATIENT_DATA_CALLERS` | `/api/v1/canonical/<table>`, `/api/v1/openehr/*`, `/api/v1/observations` — all fan a **named patient's** rows out of every CDR | `gateway.pdhc` |
-| `AGGREGATE_CALLERS` | `/api/v1/stats` — per-CDR row counts, nothing patient-identifying | `gateway.pdhc`, `monitor.pdhc` |
+| `AGGREGATE_CALLERS` | `/api/v1/stats` — per-CDR row counts, nothing patient-identifying | `gateway.pdhc` |
+
+Both hold the same one member today, and they are still two sets: the next
+monitoring or CI identity belongs in `AGGREGATE_CALLERS` alone, and having
+somewhere correct to put it is what stops it being pasted into all four
+endpoints the way the last one was. `AGGREGATE_CALLERS` is defined as a
+superset of `PATIENT_DATA_CALLERS`, so the counts-only endpoint can never
+refuse a caller the patient-data ones admit.
 
 `caller_check(blob, allowed)` returns `None` to proceed or `(payload, status)`
 — 401 when there is no `service_source` at all, 403 when it is not on the list.
@@ -76,13 +82,14 @@ The 403 body is identical either way, so a rejected caller learns that it is
 not allowed here and nothing about who is.
 
 Before #727 this was one literal, `{"gateway.pdhc", "monitor.pdhc"}`, hand-copied
-into all four route modules with no test of any kind. `monitor.pdhc` is **not a
-service**: it is a synthetic service-key identity created 2026-04-28 so the
-Playwright, perf and chaos suites could bypass SSO (`plans/*_2026-04-28.md`). It
-had patient-data access because the list was copied, not because anything asked
-for it. Dropping it from `KNOWN_SERVICES`, unsetting `MONITOR_PDHC_SERVICE_KEY`
-and rotating is the rest of #727, pending confirmation that nothing outside
-these repos still calls with that key.
+into all four route modules with no test of any kind. `monitor.pdhc` was **not a
+service**: a synthetic service-key identity created 2026-04-28 so the Playwright,
+perf and chaos suites could bypass SSO (`plans/*_2026-04-28.md`), with no repo,
+container or port. It had patient-data access because the list was copied, not
+because anything asked for it. #727 removed it from `KNOWN_SERVICES` too, so it
+no longer authenticates; `MONITOR_PDHC_SERVICE_KEY` is read nowhere and is inert
+wherever it is still set. Unsetting it on the hosts and rotating the key remain
+operator actions.
 
 This is orthogonal to `app/analyse/purpose.py` (#700): that constrains **what**
 a caller may declare it is reading for. A caller must pass both.

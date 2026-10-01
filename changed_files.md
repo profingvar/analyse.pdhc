@@ -263,3 +263,12 @@
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/__init__.py — same note at the config site.
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/.env.example — MONITOR_PDHC_SERVICE_KEY marked as a test identity, leave unset unless a harness needs it.
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/technical.md — new "Caller allowlists" section + diagram annotation; KNOWN_SERVICES bullet now says it decides who authenticates, not what they may read.
+
+## 2026-10-01 — #727 part 2: remove monitor.pdhc from analyse entirely
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/auth.py — monitor.pdhc dropped from KNOWN_SERVICES; comment records why it existed, why it went, and where to put a future monitoring identity (AGGREGATE_CALLERS only).
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/__init__.py — MONITOR_PDHC_SERVICE_KEY no longer read into config; the env var is inert wherever still set.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/.env.example — variable removed, with a note to unset it on any host that still has it.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/analyse/callers.py — AGGREGATE_CALLERS is now PATIENT_DATA_CALLERS | frozenset(), making the superset relation structural rather than conventional.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_caller_allowlist.py — rewritten, 8 tests. Asserts the refusal comes from the auth layer, not the route allowlist, and that the config key is absent.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/technical.md — allowlist table, KNOWN_SERVICES bullet and architecture diagram updated.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/readme.md — /api/v1/stats no longer lists monitor.pdhc as a caller.

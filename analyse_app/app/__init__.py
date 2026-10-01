@@ -73,16 +73,13 @@ def create_app(config=None) -> Flask:
         "SSO_CALLBACK_URL", os.environ.get("SSO_CALLBACK_URL", ""))
 
     # --- Inbound service-key callers (KNOWN_SERVICES) ---------------------
-    # gateway.pdhc (#291) + monitor.pdhc (#292) call the federated endpoints
-    # service-to-service; each presents its OWN key. monitor.pdhc is a test
-    # identity, not a service, and since #727 reaches /api/v1/stats only
-    # (app/analyse/callers.py).
+    # gateway.pdhc (#291) calls the federated endpoints service-to-service and
+    # presents its OWN key. MONITOR_PDHC_SERVICE_KEY was read here until #727
+    # removed that identity; nothing reads it now, so the variable is inert
+    # wherever it is still set in the environment.
     app.config.setdefault(
         "GATEWAY_PDHC_SERVICE_KEY",
         os.environ.get("GATEWAY_PDHC_SERVICE_KEY", ""))
-    app.config.setdefault(
-        "MONITOR_PDHC_SERVICE_KEY",
-        os.environ.get("MONITOR_PDHC_SERVICE_KEY", ""))
 
     # --- analyse's OWN outbound read identity to CDR2–6 -------------------
     app.config.setdefault(

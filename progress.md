@@ -1656,3 +1656,48 @@ and one test that fails if a route ever spells the literal out again.
 
 **NOT DEPLOYED** — held with #700 per the standing instruction, and because the
 pair belongs in one authorised step.
+
+## 2026-10-01 — #727 (part 2): monitor.pdhc removed from analyse entirely
+
+Operator decision, after the evidence on the only remaining consumer: it is
+`dashboard.pdhc`'s Playwright suite, which targets `dashboard.pdhc.se` — not
+analyse — has one commit touching it (2026-04-29, the day after it was
+written), has never produced a `playwright-report` anywhere in that repo, and
+belongs to the service #462 supersedes.
+
+So `monitor.pdhc` is gone from `KNOWN_SERVICES`, not just from the endpoint
+allowlists. It now fails at the `before_request` loader with
+`{"error": "Invalid service credentials"}`, 403, before reaching any route.
+`MONITOR_PDHC_SERVICE_KEY` is no longer read into config at all, so it is inert
+wherever it is still set in an environment.
+
+`AGGREGATE_CALLERS` is now defined as `PATIENT_DATA_CALLERS | frozenset()` —
+both hold `gateway.pdhc` and nothing else. The two sets stay, because the
+distinction is the point: the next monitoring or CI identity belongs in the
+aggregate set alone, and having somewhere correct to put it is what stops it
+being pasted into all four endpoints the way the last one was. Defining it as a
+superset also makes the invariant structural — the counts-only endpoint can
+never refuse a caller the patient-data ones admit.
+
+### Still operator-only
+Unsetting `MONITOR_PDHC_SERVICE_KEY` in the analyse and dashboard containers,
+and rotating or destroying `~/.secrets/monitor_pdhc_service_key`. Neither is
+mine to do, and neither is now urgent for analyse — the key opens nothing here.
+`dashboard.pdhc` keeps its own `KNOWN_SERVICES` entry; that repo is not mine to
+edit.
+
+### A correction worth keeping
+The blast-radius check that preceded this was initially wrong. `grep` in this
+environment is ugrep and honours `.gitignore`, and the workspace-root
+`.gitignore` is a whitelist that ignores every service directory — so a
+tree-wide `grep -r … .` from `~/T7_sidewinder` searches **none of the ~20
+service repos** and returns a confident empty result. It reported no consumers;
+there were nine files in `dashboard.pdhc`. Use `--no-ignore`, or name the
+directories.
+
+547 tests pass (was 546). `tests/test_caller_allowlist.py` rewritten: the
+refusal is now asserted to come from the auth layer rather than the route
+allowlist, because a 403 from the route would mean the identity still
+authenticates and only the endpoint list is holding it back.
+
+**NOT DEPLOYED** — held with #700.

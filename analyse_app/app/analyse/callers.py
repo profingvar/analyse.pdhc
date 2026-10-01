@@ -26,26 +26,28 @@ trusted:
     Endpoints that return per-CDR row counts and nothing patient-identifying:
     ``/api/v1/stats``.
 
-``monitor.pdhc`` is in the second set only. It is not a service: it is a
-synthetic service-key identity created 2026-04-28 so the Playwright, perf and
-chaos suites could bypass SSO (``plans/*_2026-04-28.md``). A monitoring
-identity needs to know that the CDRs are answering and roughly how much they
-hold; it has never needed a named patient's observations. It was allowlisted on
-all four endpoints because the list was written once and copied, not because
-anything asked for it.
+Both sets hold ``gateway.pdhc`` and nothing else today. They are still two
+sets, because the distinction is the point: the next monitoring or CI identity
+belongs in ``AGGREGATE_CALLERS`` alone, and having somewhere correct to put it
+is what stops it being pasted into all four endpoints the way the last one was.
 
-The rest of #727 — dropping ``monitor.pdhc`` from ``KNOWN_SERVICES``, unsetting
-``MONITOR_PDHC_SERVICE_KEY`` on the hosts, rotating it — waits on whether
-anything outside these repos still calls with that key, because that part can
-break an unknown caller. Narrowing cannot: it is correct under either answer,
-so it does not wait for one.
+That last one was ``monitor.pdhc``, removed entirely by #727 — from here and
+from ``KNOWN_SERVICES``, so it no longer authenticates at all. It was never a
+service: a synthetic service-key identity created 2026-04-28 so the Playwright,
+perf and chaos suites could bypass SSO (``plans/*_2026-04-28.md``), with no
+repo, container or port. It reached three patient-data endpoints because the
+allowlist was written once and copied, not because anything asked for it.
 """
 from __future__ import annotations
 
 from typing import Any, Iterable
 
 PATIENT_DATA_CALLERS = frozenset({"gateway.pdhc"})
-AGGREGATE_CALLERS = frozenset({"gateway.pdhc", "monitor.pdhc"})
+
+#: Everything in PATIENT_DATA_CALLERS, plus any identity that may see counts
+#: but not patients. Keep the superset relation — an endpoint that may hand out
+#: a named patient's rows must never admit a caller the aggregate one refuses.
+AGGREGATE_CALLERS = PATIENT_DATA_CALLERS | frozenset()
 
 
 def caller_check(blob: Any, allowed: Iterable[str]) -> tuple[dict, int] | None:
