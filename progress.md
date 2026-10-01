@@ -1854,3 +1854,39 @@ myself would pre-empt the ownership the ADR deliberately assigns elsewhere.
 4. Then #686 is runnable, and its "done when" is testable.
 
 No code changed. No tickets closed — all three stay open.
+
+## 2026-10-01 — #719 item 1: the operator instruction could not have worked
+
+The operator minted an ips ApiKey and put it in analyse's `.env` as
+`IPS_API_KEY`, correctly. The container had it (`printenv IPS_API_KEY` → set).
+The smoke still said **"IPS_API_KEY is not configured"**.
+
+Both were true. `IPS_API_KEY` was **read** from config —
+`app/node/service.py:78` and `app/node/reader.py:134` — and nothing ever **put**
+it there from the environment. `IPS_BASE_URL` two lines away in
+`app/__init__.py` was wired; its sibling never was. So #719's instruction was a
+correct *specification* that the code had never implemented, and the failure
+pointed the operator back at the `.env` they had just edited correctly.
+
+A second gap behind it: **`IPS_API_KEY` was not in `.env.example` at all**, so
+the committed template (Rule 23) never told anyone the variable existed. Both
+fixed.
+
+### The test is for the class, not the instance
+`tests/test_env_is_wired.py`:
+- the targeted regression — `IPS_API_KEY` in `os.environ` must reach
+  `create_app().config`;
+- the general rule — **every key that `.env.example` documents AND that the code
+  reads from config must be present in a freshly built config.** 14 keys
+  currently qualify; an operator who sets any of them is now guaranteed to be
+  heard.
+
+Both were verified to fail against a reverted fix. Worth noting *why* the
+general one initially passed while broken: `IPS_API_KEY` was absent from
+`.env.example`, so it fell outside the intersection. Documenting the variable is
+what gave the test its teeth — the two gaps were hiding each other.
+
+This class fails silently in the one direction nothing tests: a unit test
+supplies config directly and never goes through `os.environ`.
+
+549 tests pass (was 547).

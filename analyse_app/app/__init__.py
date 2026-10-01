@@ -101,6 +101,15 @@ def create_app(config=None) -> Flask:
 
     # --- Consent join (ips.pdhc analysis-filter, research reads) ----------
     app.config.setdefault("IPS_BASE_URL", os.environ.get("IPS_BASE_URL", ""))
+    # IPS_API_KEY was READ from config (node/service.py, node/reader.py) but
+    # never PUT there from the environment, so #719's operator instruction —
+    # "the key then goes in analyse.pdhc .env as IPS_API_KEY" — could not
+    # possibly work: the variable reached the container and the app never looked
+    # at it. The smoke then reported "IPS_API_KEY is not configured", which was
+    # true of the config and false of the environment, and sent the operator
+    # looking at the .env they had just correctly edited.
+    # ips reads ONLY `Authorization: ApiKey <key>` (see infra_ips_auth_header_scheme).
+    app.config.setdefault("IPS_API_KEY", os.environ.get("IPS_API_KEY", ""))
 
     # --- Federation roles (#684 / AN-12) ----------------------------------
     # ONE deployable runs either role; the role comes from config, not from a

@@ -274,3 +274,8 @@
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/readme.md — /api/v1/stats no longer lists monitor.pdhc as a caller.
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/analyse/purpose.py — docstring no longer lists monitor.pdhc as a current caller.
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/cutover_runbook.md — step 2 asked the operator to set MONITOR_PDHC_SERVICE_KEY, which would have re-introduced the variable on the next cutover. Now two keys, with an explicit do-not-set.
+
+## 2026-10-01 — #719 item 1: wire IPS_API_KEY from the environment
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/__init__.py — app.config.setdefault("IPS_API_KEY", os.environ.get(...)). It was read from config in two places and never put there.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/.env.example — IPS_API_KEY documented: how to mint it, that ips reads only Authorization: ApiKey, that scopes are not enforced, that the gate fails closed without it, and that .env lives in the release dir.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_env_is_wired.py — NEW, 2 tests. The targeted regression plus the general rule that every documented-and-read env var reaches config (14 keys). Both verified to fail against a reverted fix.
