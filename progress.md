@@ -1701,3 +1701,53 @@ allowlist, because a 403 from the route would mean the identity still
 authenticates and only the endpoint list is holding it back.
 
 **NOT DEPLOYED** — held with #700.
+
+## 2026-10-01 — #700 + #727 DEPLOYED (release 2026-09-30T07-50-25Z, rebuilt)
+
+Deployed as one authorised step, because the two fixes are not separable: both
+land in `canonical.py` and `openehr.py`, and `COPY . /app` ships the whole
+directory anyway. Eight app files: `__init__.py`, `auth.py`, and in
+`app/analyse/` `callers.py` (new), `purpose.py` (new), `canonical.py`,
+`observations_search.py`, `openehr.py`, `stats.py`.
+
+**Divergence check passed cleanly** — a three-way match before touching
+anything: local `c7e7d7f` (the last deployed commit) == release dir ==
+running image, on all six pre-existing files. No on-server-only edits to
+preserve. `callers.py` and `purpose.py` confirmed absent.
+
+Predeploy backup `~/backups/predeploy/analyse.pdhc/2026-10-01T10-43-10Z/`
+(`app_predeploy.tar.gz`, plus `release_dir.txt` and `image_sha.txt` recording
+the rollback target `sha256:4f3a66ad…`).
+
+scp → `py_compile` (OK) → post-copy hashes re-verified against local byte for
+byte → `docker-compose up -d --build` as **one** step, not two. Built
+`888e2c2ad463`.
+
+### Verified inside the running container, not the release dir
+```
+KNOWN_SERVICES:       {'gateway.pdhc': 'GATEWAY_PDHC_SERVICE_KEY'}
+PATIENT_DATA_CALLERS: ['gateway.pdhc']
+AGGREGATE_CALLERS:    ['gateway.pdhc']
+DECLARABLE:           ['quality_registry','research','statistics']  X-Access-Purpose
+```
+
+### Verified behaviourally against 127.0.0.1:9110
+- `/healthz` → 200, `database: connected`.
+- `gateway.pdhc` → `/api/v1/stats` → **200**, 5/5 CDRs responding, 11 736
+  patients. The one real caller is unaffected.
+- `monitor.pdhc` (any key) → **403 `Invalid service credentials`**, refused at
+  the `before_request` loader before reaching a route. #727 live.
+- `gateway.pdhc` → `/api/v1/canonical/health_observations` with no
+  `X-Access-Purpose` → **400 `purpose_required`**, message naming the three
+  valid values. #700 live.
+
+### Still outstanding on #727 (operator)
+1. `MONITOR_PDHC_SERVICE_KEY` is **still in analyse's container env** (count 1).
+   It is inert — nothing reads it since this deploy — so it is tidiness, and
+   folding it into the next deploy avoids a container recreate for an unread
+   variable.
+2. **dashboard.pdhc still has the identity in its own `KNOWN_SERVICES`**, so the
+   key still opens dashboard's APIs. That repo is not mine to edit.
+3. Rotate or destroy `~/.secrets/monitor_pdhc_service_key`.
+
+#727 stays OPEN until 2 and 3 are done. #700 is complete.
