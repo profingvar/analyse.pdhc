@@ -1792,3 +1792,65 @@ removed one of the two identities that could do it; `gateway.pdhc` remains. The
 service blob has no orgs so scoping *should* empty every read — that "should" is
 the thing to verify, given ips's block filter failed open once (e7e81a1). #729
 also asks whether the sibling loaders that copied this pattern share it.
+
+## 2026-10-01 — #686/#712 readiness audit: one operator action is the whole blocker
+
+Ran the diagnostic #719 points at, inside the running container
+(`docker exec analyse_pdhc_app python deploy/smoke_siblings.py`). **Eight checks
+green, one red:**
+
+```
+✓ CDR_ENDPOINTS populated                      5 endpoint(s)
+✓ ANALYSE_PDHC_SERVICE_KEY set
+✓ IPS_BASE_URL set                             https://ips.pdhc.se
+✓ every CDR endpoint answers /healthz           cdr2, cdr3, cdr4, cdr5, cdr6
+✓ an authenticated FHIR read succeeds on every endpoint   mode=complete, 5/5
+✗ ips: the spärr predicate answers              IPS_API_KEY is not configured
+✓ SSO_BASE_URL reachable                       /api/health 200
+✓ the service credential pair is configured
+```
+
+So the federation wiring that #686 doubted is **already proven live** on the
+coordinator path: five CDRs reachable and authenticated, reads returning
+`mode=complete`. What is missing is one credential.
+
+### The blocker, precisely
+`IPS_API_KEY` is unset in the analyse container. ips validates an ApiKey against
+its own `api_keys` table and reads only `Authorization: ApiKey <key>`; there is
+**no mint CLI** in ips (only `sweep-blocks`), so issuing one is an authenticated
+admin action on ips.pdhc — operator-only, and not something to improvise, since
+it is a credential.
+
+Until it exists the spärr gate fails **closed**: every patient is treated as
+blocked, so a node would compute over nobody. That is the designed behaviour and
+is already covered by tests (`test_sparr_gate.py`, `test_node.py` both assert
+`ConsentUnavailable` with "treated as blocked" / "fails closed"), which is why
+#686's remaining value is specifically the *real* stack, not more fixtures.
+
+### #712 preconditions re-verified today
+- Ports **9112–9119 all free** on miserver; nothing docker-published in that range.
+- `ANALYSE_ROLE=coordinator`, and the node surface is genuinely absent from the
+  public instance — `app.url_map` has **no `/node/` routes**. #712's warning about
+  never setting `ANALYSE_ROLE=both` on the public instance is being honoured.
+- `ANALYSE_TRANSPORT_SECRET` and `ANALYSE_NODES` are **unset**, as expected —
+  nothing node-related is configured yet.
+
+### Why I stopped here rather than preparing policy files
+ADR-0005 puts each node's policy file in the hands of **the organisation behind
+that CDR**, and `source_clinic_id` is the sso.pdhc organisation guid whose data
+that CDR holds (#719 item 2). I can discover which org's rows sit in a CDR;
+I cannot decide which organisation *stands behind* it. Writing six policy files
+myself would pre-empt the ownership the ADR deliberately assigns elsewhere.
+
+### Operator action list, in order
+1. Mint an ips ApiKey for analyse; put it in analyse's `.env` as `IPS_API_KEY`.
+   Note `.env` lives in the **release directory**, so it must be carried across a
+   release swap. Re-run the smoke; the ips check should go green. (#719 item 1)
+2. Decide the `source_clinic_id` per CDR — six sso organisation guids. (#719 item 2)
+3. Then #712 becomes mechanical: six node containers on 9112–9117, one shared
+   `ANALYSE_TRANSPORT_SECRET` (≥32 bytes, no default by design), `ANALYSE_NODES`
+   on the coordinator, six policy files with `data_mode: synthetic`, and
+   `ANALYSE_ALLOW_LIVE_DATA` left unset.
+4. Then #686 is runnable, and its "done when" is testable.
+
+No code changed. No tickets closed — all three stay open.
