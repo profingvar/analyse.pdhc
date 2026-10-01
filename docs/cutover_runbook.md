@@ -12,9 +12,11 @@ each before the next.
    `SSO_CLIENT_ID` / `SSO_CLIENT_SECRET` (see memory: PDHC SSO client creds
    audit — each service's .env needs the matching `_<SERVICE>` pair or
    `/me/service` 401s). Callback path is `/auth/callback`.
-2. **Three service keys** for analyse's `.env`:
-   `ANALYSE_PDHC_SERVICE_KEY` (analyse's OWN outbound identity to CDR2–6),
-   `GATEWAY_PDHC_SERVICE_KEY`, `MONITOR_PDHC_SERVICE_KEY` (inbound callers).
+2. **Two service keys** for analyse's `.env`:
+   `ANALYSE_PDHC_SERVICE_KEY` (analyse's OWN outbound identity to CDR2–6) and
+   `GATEWAY_PDHC_SERVICE_KEY` (the one inbound caller).
+   Do **not** set `MONITOR_PDHC_SERVICE_KEY` — #727 removed that identity and
+   nothing reads the variable; this step used to ask for three keys.
 3. **CDR2–6 URLs** for `CDR_ENDPOINTS` (+ whatever per-CDR outbound key
    `federation.CdrRegistry.from_config` reads — see `.env.example`).
 4. **Reverse-proxy vhost** `analyse.pdhc.se → 127.0.0.1:9110` + **DNS** +

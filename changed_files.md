@@ -272,3 +272,5 @@
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_caller_allowlist.py — rewritten, 8 tests. Asserts the refusal comes from the auth layer, not the route allowlist, and that the config key is absent.
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/technical.md — allowlist table, KNOWN_SERVICES bullet and architecture diagram updated.
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/readme.md — /api/v1/stats no longer lists monitor.pdhc as a caller.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/analyse/purpose.py — docstring no longer lists monitor.pdhc as a current caller.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/cutover_runbook.md — step 2 asked the operator to set MONITOR_PDHC_SERVICE_KEY, which would have re-introduced the variable on the next cutover. Now two keys, with an explicit do-not-set.

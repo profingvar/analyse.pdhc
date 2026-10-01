@@ -14,8 +14,8 @@ patient's rows out of every CDR with analyse's service key, applied no
 
 The correct basis for a read is a property of the CALLER, not of the endpoint.
 These two endpoints have no caller in any repo — they are surface kept for
-``gateway.pdhc`` and ``monitor.pdhc`` — so any purpose analyse picked would be
-a guess, and the wrong guess is not neutral: declaring ``research`` applies an
+``gateway.pdhc`` (and, until #727 removed it, ``monitor.pdhc``) — so any
+purpose analyse picked would be a guess, and the wrong guess is not neutral: declaring ``research`` applies an
 EHDS opt-out to what might be a care-delivery read and silently removes rows
 the caller is entitled to.
 
