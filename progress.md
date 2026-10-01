@@ -1751,3 +1751,44 @@ DECLARABLE:           ['quality_registry','research','statistics']  X-Access-Pur
 3. Rotate or destroy `~/.secrets/monitor_pdhc_service_key`.
 
 #727 stays OPEN until 2 and 3 are done. #700 is complete.
+
+## 2026-10-01 — #727 CLOSED: the identity no longer exists anywhere
+
+The three remaining items are done.
+
+1. **dashboard.pdhc** dropped `monitor.pdhc` from its own `KNOWN_SERVICES`
+   (commit `d226835` in that repo, deployed and verified:
+   `KNOWN_SERVICES == {'gateway.pdhc': …}` inside `dashboard_pdhc_app`,
+   `/healthz` 200). Done under explicit operator instruction, which overrode the
+   standing "do not touch other services" rule for that one change. Its
+   divergence check also passed three ways beforehand.
+2. **The key is destroyed.** `~/.secrets/monitor_pdhc_service_key` — on the Mac,
+   not on miserver, which is why the #727 ticket's path was wrong: the April
+   suites were run locally. 44 bytes, created 28 Apr 19:10,
+   `sha256[:24]=2b65d1d86b1c88eaf9c77d71`. Hash-compared against the value in
+   dashboard's `.env` first: same key, one identity, one secret. Removed with
+   `rm -P`. The other three files in `~/.secrets/` are untouched and unrelated
+   (`sim_pdhc_service_key` is live).
+3. **`MONITOR_PDHC_SERVICE_KEY` unset** in both `.env` files and confirmed absent
+   from both container environments. analyse took a config-only
+   `docker-compose up -d` (no rebuild needed — the image was already current).
+
+Post-change verification, from inside the box:
+`analyse /healthz` 200 · `gateway → /api/v1/stats` 200 · `monitor → 403` ·
+`dashboard /healthz` 200.
+
+### Hygiene note
+The `.env` backups I took during the deploy contained the retired key in clear.
+Both were redacted to `<REDACTED 2026-10-01 #727: identity destroyed>`, and
+`~/backups/predeploy/` was swept for any remaining live value (none). Worth
+remembering generally: a predeploy `.env` copy is a secret store, and these
+backups are mirrored to the T9 drive.
+
+### Spun out, not fixed
+**#729** — dashboard's loader returns from the service-key branch *before*
+`_dashboard_access_allowed`, so a service-key caller skips the care-delivery /
+analysis-phase gate and can address the clinical paths. Removing `monitor.pdhc`
+removed one of the two identities that could do it; `gateway.pdhc` remains. The
+service blob has no orgs so scoping *should* empty every read — that "should" is
+the thing to verify, given ips's block filter failed open once (e7e81a1). #729
+also asks whether the sibling loaders that copied this pattern share it.
