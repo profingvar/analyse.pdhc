@@ -1958,3 +1958,53 @@ match the pooled figure; identical data across nodes would have double-counted
 and made the comparison meaningless. It will not.
 
 Read-only throughout. No code changed, no tickets closed.
+
+## 2026-10-02 — #688: the landing page stops being a blank JSON box
+
+Operator feedback on the live `/researcher` page: "a very raw entry to analyse".
+It was correct. The page opened on an empty textarea containing a JSON skeleton,
+with no indication of what data existed to write a predicate *against*. That is
+the #688 complaint in its purest form.
+
+### Available data, first
+New `GET /api/inventory` (`routes/researcher.py`): the same fan-out as
+`/api/v1/stats`, **unpooled**. The federated stats endpoint sums every CDR into
+one total, which is the right answer for a monitor and the wrong one for a
+researcher — a cohort resolves *across* sources, so "which source holds what" is
+the first thing you need.
+
+The case that drove the design is the **unreachable** one. A source that does
+not answer is reported by name with `reachable: false` and counts of `None` —
+not dropped, not zeroed. Dropping it would make a cohort look smaller than the
+data warrants for a reason nothing on the page could show; zeroing it would be a
+confident lie. The page says so out loud: *"3 of 5 sources answered — a cohort
+defined now will be incomplete."*
+
+### Start from a question
+Five starting points, phrased as questions, each filling the editor with a valid
+predicate. **Defined server-side** in `views.COHORT_STARTERS`, not as a
+JavaScript literal — because every one must be a predicate the resolver actually
+accepts, and that is only checkable if the tests can import them. The test runs
+each through `CohortFilter.from_dict`, the same parser the route uses.
+
+That was the second attempt. The first defined them in the template and had the
+test regex-scrape the rendered HTML; it broke on the first nested brace. A test
+that can only inspect its subject through a regex is testing the regex.
+
+### Also on the page
+The accepted predicate keys, spelled out rather than left to be guessed. A
+"what this workspace can do" section naming the seven analyses — and **not**
+naming `linear_regression` or `kaplan_meier`, which are in the engine REGISTRY
+but absent from the spec's `Analysis` union, so no spec can request them. There
+is a test that fails if the page starts advertising them.
+
+### Not built: a variable inventory
+"What *variables* can I ask about in each CDR" needs distinct `code_canonical`
+per source, and **no CDR endpoint exposes that** — `/api/v1/stats` is counts
+only. Adding one is a change to cdr.pdhc, so it is a separate ticket rather than
+something to reach across and do. Counts are what could be delivered honestly
+today.
+
+559 tests pass (was 549). `tests/test_inventory.py` is new (5), plus 5 in
+`test_ui.py` covering ordering, the starters, the wiring, and the
+don't-advertise-what-you-cannot-run rule.

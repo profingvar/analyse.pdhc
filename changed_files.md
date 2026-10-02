@@ -279,3 +279,10 @@
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/__init__.py — app.config.setdefault("IPS_API_KEY", os.environ.get(...)). It was read from config in two places and never put there.
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/.env.example — IPS_API_KEY documented: how to mint it, that ips reads only Authorization: ApiKey, that scopes are not enforced, that the gate fails closed without it, and that .env lives in the release dir.
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_env_is_wired.py — NEW, 2 tests. The targeted regression plus the general rule that every documented-and-read env var reaches config (14 keys). Both verified to fail against a reverted fix.
+
+## 2026-10-02 — #688: researcher landing rebuilt
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/routes/researcher.py — NEW GET /api/inventory: per-CDR counts, unpooled, with unreachable sources named rather than dropped or zeroed.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/routes/views.py — COHORT_STARTERS defined server-side so the tests can validate each against CohortFilter.from_dict; passed to the template.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/templates/researcher_workspace.html — rewritten: availability table first, question-shaped starters, documented predicate keys, degraded-sources warning, capability summary.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_inventory.py — NEW, 5 tests.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_ui.py — 5 landing tests.

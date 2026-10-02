@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 
 from app.spec import AnalysisSpec
+from tests.conftest import make_app
 from app.ui import charts, i18n, questions, recipes, sentences
 from app.ui.palette import OKABE_ITO, series_style
 
@@ -253,3 +254,77 @@ class TestOutputsStayClean:
                 "v", {"n": 40, "mean": 1.0, "ci95": [0, 2]}),
             "recipe": recipes.make_recipe("n", _spec(), recipe_id="r1").to_json(),
         }, where="ui output")
+
+
+# --- the researcher landing (#688) ------------------------------------------
+
+def _landing(client):
+    r = client.get("/researcher")
+    assert r.status_code == 200
+    return r.get_data(as_text=True)
+
+
+def test_landing_leads_with_what_data_exists():
+    """The complaint that prompted this: the page opened on a blank JSON box.
+
+    A predicate written against data that is not there is the commonest way to
+    waste an afternoon, so availability comes first and the editor second.
+    """
+    html = _landing(make_app().test_client())
+    assert "Available data" in html
+    assert "/api/inventory" in html
+    assert html.index("Available data") < html.index("Cohort predicate")
+
+
+def test_landing_offers_question_shaped_starting_points():
+    html = _landing(make_app().test_client())
+    assert "Start from a question" in html
+    for q in ("Everyone, every source", "Working-age adults", "Older adults"):
+        assert q in html
+
+
+def test_every_starter_is_a_predicate_the_resolver_accepts():
+    """Offering a starting point that cannot run is worse than offering none.
+
+    The starters are server-side data (views.COHORT_STARTERS) precisely so this
+    can be checked by importing them. The first version defined them as a
+    JavaScript literal and this test regex-scraped the rendered page, which
+    broke on the first nested brace — a test that can only inspect its subject
+    through a regex is testing the regex.
+    """
+    from app.analyse.cohort import CohortFilter
+    from app.routes.views import COHORT_STARTERS
+
+    top = {"cdr_ids", "demographics", "conditions", "medications",
+           "type_canonical"}
+    demo = {"age_min", "age_max", "sex", "region"}
+    assert len(COHORT_STARTERS) >= 4
+
+    for s in COHORT_STARTERS:
+        assert s["q"] and s["why"], "a starter needs a question and a reason"
+        f = s["filter"]
+        assert set(f) <= top, f"unknown key in {s['q']}: {set(f) - top}"
+        assert set(f.get("demographics") or {}) <= demo, (
+            f"unknown demographics key in {s['q']}: "
+            f"{set(f['demographics']) - demo}")
+        # The real contract: it has to survive the parser the route uses.
+        CohortFilter.from_dict(f)
+
+
+def test_the_rendered_page_actually_carries_the_starters():
+    """Guards the wiring, not just the data — a correct list that never
+    reaches the template would pass the test above and ship a blank page."""
+    from app.routes.views import COHORT_STARTERS
+    html = _landing(make_app().test_client())
+    for s in COHORT_STARTERS:
+        assert s["q"] in html
+
+
+def test_landing_does_not_promise_analyses_the_spec_cannot_request():
+    """linear_regression and kaplan_meier are in the engine REGISTRY but absent
+    from the spec's Analysis union, so no spec can ask for them. The page must
+    not advertise them."""
+    html = _landing(make_app().test_client())
+    assert "linear_regression" not in html
+    assert "kaplan_meier" not in html
+    assert "regression" not in html.lower() or "survival" not in html.lower()

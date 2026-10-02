@@ -171,6 +171,58 @@ def _apply_research_consent(members: set[str]) -> tuple[set[str], dict]:
 
 
 # ---------------------------------------------------------------------------
+# GET /api/inventory — what data is actually available, PER CDR
+# ---------------------------------------------------------------------------
+
+@bp.get("/inventory")
+@researcher_required
+@audit_read
+def inventory():
+    """Per-CDR row counts, so the landing page can say what is there.
+
+    The federated ``/api/v1/stats`` endpoint pools every CDR into one total,
+    which is the right answer for a monitor and the wrong one for a researcher:
+    a cohort is resolved ACROSS sources, so "which source holds what" is the
+    first thing you need before writing a predicate. Same fan-out, unpooled.
+
+    A CDR that does not answer is reported as unreachable rather than omitted
+    or counted as zero. An inventory that silently drops a source would make a
+    cohort look smaller than it is for a reason nobody could see.
+    """
+    registry = _registry()
+    if not registry.all:
+        return jsonify({"cdrs": [], "totals": {}, "mode": "empty"}), 200
+
+    response = fanout(registry, method="GET", path="/api/v1/stats", params=None)
+    by_id = {r.cdr_id: r for r in response.results}
+
+    keys = ("patients", "health_observations", "fhir_resources",
+            "openehr_compositions")
+    cdrs, totals = [], {k: 0 for k in keys}
+    for ep in registry.all:
+        r = by_id.get(ep.cdr_id)
+        ok = bool(r and r.ok and r.body)
+        row = {"cdr_id": ep.cdr_id, "reachable": ok}
+        for k in keys:
+            v = (r.body.get(k) if ok else None)
+            v = int(v) if isinstance(v, (int, float)) else None
+            row[k] = v
+            if v:
+                totals[k] += v
+        cdrs.append(row)
+
+    responded = sum(1 for c in cdrs if c["reachable"])
+    return jsonify({
+        "cdrs": cdrs,
+        "totals": totals,
+        "cdrs_total": len(cdrs),
+        "cdrs_responded": responded,
+        "mode": ("complete" if responded == len(cdrs)
+                 else "degraded" if responded else "error"),
+    }), 200
+
+
+# ---------------------------------------------------------------------------
 # POST /api/cohort  — define a cohort, return id + count
 # ---------------------------------------------------------------------------
 

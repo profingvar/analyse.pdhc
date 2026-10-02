@@ -5,66 +5,199 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Researcher workspace · analyse.pdhc</title>
 <style>
-  :root { --border:#d9dde3; --card-bg:#fff; --primary:#2a6ebb; --muted:#667; }
+  :root { --border:#d9dde3; --card-bg:#fff; --primary:#2a6ebb; --muted:#667;
+          --ok:#1d7a46; --warn:#9a6700; --bad:#b3261e; --ink:#1a1d21; }
   * { box-sizing:border-box; }
-  body { font-family:system-ui,-apple-system,sans-serif; margin:0; background:#f5f6f8; color:#1a1d21; }
+  body { font-family:system-ui,-apple-system,sans-serif; margin:0; background:#f5f6f8; color:var(--ink); }
   header { display:flex; align-items:center; justify-content:space-between;
            padding:.7rem 1.2rem; background:#fff; border-bottom:1px solid var(--border); }
   header h1 { font-size:1.05rem; margin:0; }
-  header a { color:var(--primary); text-decoration:none; font-size:.9rem; }
-  main { max-width:60rem; margin:1.2rem auto; padding:0 1rem; }
+  header nav a { color:var(--primary); text-decoration:none; font-size:.9rem; margin-left:1rem; }
+  main { max-width:62rem; margin:1.2rem auto; padding:0 1rem; }
   button { font:inherit; padding:.4rem .8rem; border:1px solid var(--primary);
            background:var(--primary); color:#fff; border-radius:4px; cursor:pointer; }
+  button.ghost { background:#fff; color:var(--primary); }
   .status { color:var(--muted); font-size:.85rem; }
   .card { background:var(--card-bg); border:1px solid var(--border); border-radius:6px;
           padding:.8rem 1rem; margin-bottom:1rem; }
-  .card h2 { font-size:1rem; margin:0 0 .5rem; }
+  .card h2 { font-size:1rem; margin:0 0 .35rem; }
+  .card > p.status { margin:.1rem 0 .7rem; }
   textarea { width:100%; min-height:7rem; font:.85rem ui-monospace,Menlo,monospace;
              border:1px solid var(--border); border-radius:4px; padding:.5rem; }
   table { width:100%; border-collapse:collapse; font-size:.92rem; }
-  td, th { padding:.3rem .4rem; border-bottom:1px solid #eee; text-align:left; }
+  td, th { padding:.35rem .4rem; border-bottom:1px solid #eee; text-align:left; }
+  th { font-size:.78rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); font-weight:600; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .dot { display:inline-block; width:.55rem; height:.55rem; border-radius:50%; margin-right:.4rem; }
+  .dot.up { background:var(--ok); } .dot.down { background:var(--bad); }
+  .starters { display:grid; grid-template-columns:repeat(auto-fit,minmax(15rem,1fr)); gap:.6rem; }
+  .starter { text-align:left; background:#fff; color:var(--ink); border:1px solid var(--border);
+             border-radius:5px; padding:.55rem .7rem; cursor:pointer; }
+  .starter:hover { border-color:var(--primary); }
+  .starter b { display:block; font-size:.92rem; font-weight:600; margin-bottom:.15rem; }
+  .starter span { font-size:.8rem; color:var(--muted); }
+  details > summary { cursor:pointer; font-size:.9rem; color:var(--primary); }
+  .note { font-size:.82rem; color:var(--muted); border-left:3px solid var(--border);
+          padding-left:.6rem; margin:.6rem 0 0; }
   [hidden] { display:none !important; }
 </style>
 </head>
 <body>
 <header>
   <h1>analyse.pdhc · Researcher workspace</h1>
-  <a href="/auth/logout">Log out</a>
+  <nav>
+    <a href="/analysis">Run an analysis →</a>
+    <a href="/auth/logout">Log out</a>
+  </nav>
 </header>
 <main>
+
+  <!-- What is actually there. First, because a predicate written against
+       data that does not exist is the most common way to waste an afternoon. -->
   <div class="card">
-    <h2>Define a cohort</h2>
-    <p class="status">Group / population layer — analysis phase. Enter a cohort
-      filter predicate (JSON) and resolve it across CDR2&ndash;6.</p>
+    <h2>Available data</h2>
+    <p class="status">Live counts per source. A cohort resolves <em>across</em>
+      these, so this is what any predicate below is matching against.</p>
+    <table id="inv">
+      <thead><tr>
+        <th>Source</th><th class="num">Patients</th>
+        <th class="num">Observations</th><th class="num">FHIR resources</th>
+      </tr></thead>
+      <tbody><tr><td colspan="4" class="status">loading…</td></tr></tbody>
+    </table>
+    <p id="inv-note" class="status"></p>
+  </div>
+
+  <!-- Starting points, so the first interaction is not a blank JSON box. -->
+  <div class="card">
+    <h2>Start from a question</h2>
+    <p class="status">Each one fills the editor below with a valid predicate.
+      Edit it from there — nothing is run until you choose.</p>
+    <div class="starters" id="starters"></div>
+  </div>
+
+  <div class="card">
+    <h2>Cohort predicate</h2>
+    <p class="status">Accepted keys: <code>cdr_ids</code>,
+      <code>demographics</code> (<code>age_min</code>, <code>age_max</code>,
+      <code>sex</code>, <code>region</code>), <code>conditions</code>,
+      <code>medications</code>, <code>type_canonical</code>. An empty
+      <code>cdr_ids</code> means every source.</p>
     <textarea id="filter">{
   "cdr_ids": [],
   "demographics": { "age_min": 40, "age_max": 70 },
   "conditions": []
 }</textarea>
     <p><button id="define">Define cohort</button>
+       <button id="reset" class="ghost" type="button">Reset</button>
        <span id="status" class="status"></span></p>
+    <p class="note">Defining a cohort resolves it across the sources and applies
+      the research-consent filter. Counts below <b>k</b> are suppressed when the
+      cohort is analysed, not here.</p>
   </div>
 
   <div id="pane" class="card" hidden>
     <h2>Cohort</h2>
     <div id="cohort-meta" class="status"></div>
+    <p><a id="go-analyse" href="/analysis">Analyse this cohort →</a></p>
   </div>
 
   <div class="card">
     <h2>Recent cohorts</h2>
-    <table id="cohorts"><tbody></tbody></table>
+    <table id="cohorts">
+      <thead><tr><th>Id</th><th class="num">n</th><th>Created</th></tr></thead>
+      <tbody></tbody>
+    </table>
   </div>
+
+  <details class="card">
+    <summary>What this workspace can do</summary>
+    <p class="status">Seven analyses are available on the
+      <a href="/analysis">analysis page</a>: describe, histogram, frequency,
+      correlation, compare groups, over time, completeness. The method for a
+      correlation is derived from the data, never chosen — picking between
+      Pearson and Spearman is a statistics question, and asking it of a
+      clinician is how the wrong one gets picked.</p>
+    <p class="status">Every result passes k-anonymity twice: once at each source
+      before anything leaves it, and once after merging — because two safe
+      partials can merge into an unsafe total.</p>
+  </details>
+
 </main>
 
 <script>
-// Thin shell: every action calls the ported /api/cohort JSON endpoints,
-// which authenticate via the session cookie set by the SSO callback.
+// Thin shell: every action calls the /api JSON endpoints, which authenticate
+// via the session cookie set by the SSO callback.
 const $ = (id) => document.getElementById(id);
+const DEFAULT_FILTER = {
+  cdr_ids: [], demographics: { age_min: 40, age_max: 70 }, conditions: []
+};
+
+// Starters come from the SERVER (views.COHORT_STARTERS), not from a literal
+// here, so the tests can import them and prove each one is a predicate the
+// resolver accepts. A starting point that cannot run is worse than none.
+const STARTERS = {{ starters | tojson }};
 
 async function jfetch(url, opts) {
   const r = await fetch(url, Object.assign({ credentials: "same-origin" }, opts || {}));
   if (r.status === 401) { window.location = "/auth/login"; return null; }
   return { status: r.status, body: await r.json().catch(() => null) };
+}
+
+const fmt = (n) => (n === null || n === undefined) ? "—" : n.toLocaleString();
+
+async function loadInventory() {
+  const tb = $("inv").querySelector("tbody");
+  const r = await jfetch("/api/inventory");
+  if (!r || r.status !== 200 || !r.body) {
+    tb.innerHTML = "<tr><td colspan='4' class='status'>inventory unavailable</td></tr>";
+    return;
+  }
+  const b = r.body;
+  tb.innerHTML = "";
+  for (const c of b.cdrs || []) {
+    const tr = document.createElement("tr");
+    const dot = `<span class="dot ${c.reachable ? "up" : "down"}"></span>`;
+    tr.innerHTML = `<td>${dot}${c.cdr_id}</td>`
+      + `<td class="num">${fmt(c.patients)}</td>`
+      + `<td class="num">${fmt(c.health_observations)}</td>`
+      + `<td class="num">${fmt(c.fhir_resources)}</td>`;
+    if (!c.reachable) tr.querySelectorAll("td.num").forEach(td => td.textContent = "unreachable");
+    tb.appendChild(tr);
+  }
+  if (!tb.children.length) {
+    tb.innerHTML = "<tr><td colspan='4' class='status'>no sources configured</td></tr>";
+  } else {
+    const t = b.totals || {};
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td><b>Total</b></td><td class="num"><b>${fmt(t.patients)}</b></td>`
+      + `<td class="num"><b>${fmt(t.health_observations)}</b></td>`
+      + `<td class="num"><b>${fmt(t.fhir_resources)}</b></td>`;
+    tb.appendChild(tr);
+  }
+  // Say it plainly when a source is missing: a cohort resolved now would be
+  // smaller than the data warrants, and nothing else on the page would show it.
+  $("inv-note").textContent = b.mode === "complete"
+    ? `${b.cdrs_responded} of ${b.cdrs_total} sources answered.`
+    : `${b.cdrs_responded} of ${b.cdrs_total} sources answered — a cohort defined `
+      + `now will be incomplete.`;
+}
+
+function renderStarters() {
+  const wrap = $("starters");
+  wrap.innerHTML = "";
+  for (const s of STARTERS) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "starter";
+    b.innerHTML = `<b>${s.q}</b><span>${s.why}</span>`;
+    b.addEventListener("click", () => {
+      $("filter").value = JSON.stringify(s.filter, null, 2);
+      $("status").textContent = "predicate loaded — review it, then define";
+      $("filter").scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    wrap.appendChild(b);
+  }
 }
 
 async function define() {
@@ -94,15 +227,21 @@ async function loadCohorts() {
   if (!r || r.status !== 200 || !r.body) return;
   for (const c of r.body.cohorts || []) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${c.cohort_id.slice(0, 8)}</td><td>${c.n}</td>`
+    tr.innerHTML = `<td>${c.cohort_id.slice(0, 8)}</td><td class="num">${c.n}</td>`
       + `<td class="status">${(c.created_at || "").slice(0, 19)}</td>`;
     tb.appendChild(tr);
   }
-  if (!tb.children.length) tb.innerHTML = "<tr><td class='status'>no cohorts yet</td></tr>";
+  if (!tb.children.length) tb.innerHTML = "<tr><td colspan='3' class='status'>no cohorts yet</td></tr>";
 }
 
 document.addEventListener("DOMContentLoaded", () => {
   $("define").addEventListener("click", define);
+  $("reset").addEventListener("click", () => {
+    $("filter").value = JSON.stringify(DEFAULT_FILTER, null, 2);
+    $("status").textContent = "";
+  });
+  renderStarters();
+  loadInventory();
   loadCohorts();
 });
 </script>
