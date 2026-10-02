@@ -1,15 +1,27 @@
 # analyse.pdhc — current focus
 
-DEPLOYED 2026-09-29. Release `2026-09-29T19-00-32Z`, `ANALYSE_ROLE=coordinator`,
-SQLAlchemy 2.0.54, migrations at `0002_audit_spec (head)`, all 5 CDR_ENDPOINTS
-carried through, `/api/v1/node/*` correctly absent. 467 tests.
+DEPLOYED 2026-10-01. `ANALYSE_ROLE=coordinator`, all 5 CDR_ENDPOINTS carried
+through, `/api/v1/node/*` correctly absent, **all 8 sibling-smoke checks green**
+(`docker exec analyse_pdhc_app python deploy/smoke_siblings.py`). 549 tests.
+Live since 2026-10-01: #700 purpose gate, #727 caller allowlists, #719 item 1
+(IPS_API_KEY now actually reaches config — it never did before).
+
+## BLOCKED ON ONE DECISION — read this before touching #712
+`source_clinic_id` per node (#719 item 2) is unanswered, and the org survey in
+progress.md (2026-10-01) says it is a **decision, not a lookup**:
+- cdr2-5 hold only the nil UUID, so their source org must be *assigned*;
+- **cdr1 holds six organisations**, so a node with one `source_clinic_id` asks
+  ips the wrong spärr question for ~7 400 of its 7 421 rows — silently. Either
+  cdr1 gets no node, or the policy takes more than one source. SETTLE FIRST.
+- two org guids present in CDR data are not in sso at all.
 
 ## Next
-- #712 stand up the per-CDR node topology (ADR-0005) — deferred on purpose.
-  The live analysis path uses CdrRegistry + CDR_ENDPOINTS, which already
-  federates across cdr2-6; the coordinator<->node transport is CLI-only today.
-  Do this when the simulated data exists, not before.
+- #712 stand up the per-CDR node topology (ADR-0005). Ports 9112-9119 verified
+  free 2026-10-01. Mechanical once the decision above is made; policy files are
+  owned by the organisation behind each CDR, not by us.
 - #686 gap G6 — the federated stack has still never run against real CDRs.
+  cdr2-5 confirmed to be four independent seedings (distinct patient guids), so
+  the pooled-vs-merged comparison in its "done when" is meaningful.
 - #688 Phase 3 usability walkthrough (SSO-gated; needs a human with a real
   professional token). This was #685's outstanding acceptance and is still
   outstanding.
