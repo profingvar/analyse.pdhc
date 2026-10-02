@@ -1890,3 +1890,71 @@ This class fails silently in the one direction nothing tests: a unit test
 supplies config directly and never goes through `os.environ`.
 
 549 tests pass (was 547).
+
+## 2026-10-01 — #719 item 2: what org guids each CDR actually holds
+
+Read-only survey of every `%org_guid%` column in all six CDRs, with the guids
+resolved against `sso.organisations` (note: British spelling — there is no
+`organizations` table).
+
+### cdr1 — real data, SIX organisations
+| org guid | sso name | observations |
+|---|---|---|
+| `077d02be-4caf-4cc7-9652-a65cb3e4cb81` | cgm_provider | 7 045 |
+| `a5d6ebcf-6285-4dee-a396-4f5379c8f787` | CambioCaregiver | 328 |
+| `7a69ab02-dfce-43ae-ade7-fabf6b858d84` | MeditunerAB | 14 |
+| `1c9fb86e-ef70-4db3-8205-45f28a4b27c5` | Provider1 | 13 |
+| `14b25a1f-63b4-4369-810b-15388d22947b` | 1177 | 10 |
+| `e0153481-76a3-4f66-a8a6-1d3055c356ca` | **not in sso** | 6 |
+
+Plus four non-GUID strings in a GUID column: `smoke-408x2-o`, `smoke-299-o`,
+`smoke-org-296`, `smoke3-o` (Rule 18 says GUID-only; these are test residue).
+`clinical_context.author_org_guid` and `requesting_org_guid` are null on all
+7 421 rows — only `provider_org_guid` is populated.
+
+### cdr2–cdr5 — the nil UUID and nothing else
+All four: `00000000-0000-0000-0000-000000000000`, 2 629 300 observations,
+100 patients. No org attribution of any kind.
+
+### cdr_6 — synthetic author patterns
+`ffffffff-eeee-dddd-cccc-bbbbbbbbbbbb` (1 273 359),
+`aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee` (9 091),
+`11111111-2222-3333-4444-555555555555` (2 600), and
+`2cc4e9e1-68a7-4215-b107-efe252ae7e89` (246) which looks real but is **not in
+sso** either. `provider_org_guid` and `requesting_org_guid` null throughout.
+
+### Three consequences for #712
+
+**1. The data cannot answer the question for cdr2–5.** They hold synthetic rows
+stamped with the nil org, so `source_clinic_id` for those nodes is a deliberate
+*assignment* — which organisation the synthetic stack should pretend stands
+behind each node — not a discovery. sso currently holds ten: 1177, Abbott,
+CambioCaregiver, KS, MeditunerAB, Provider1, Region Uppsala, Test Clinic, UAS,
+cgm_provider. Whatever is chosen is the org ips will be asked about, so the
+spärr verdicts a node gets back are verdicts about *that* org.
+
+**2. cdr1 breaks the one-org-per-node model, and breaks it quietly.** #712 plans
+a node on 9112 for cdr1, and `source_clinic_id` is a single value — but cdr1
+holds six organisations. A node given one value will run happily and ask ips the
+wrong spärr question for ~7 400 of its 7 421 rows. Two defensible resolutions:
+give cdr1 no node (consistent with it being deliberately absent from
+`CDR_ENDPOINTS` because gateway feeds it), or extend the policy to more than one
+source per node. **Settle this before standing nodes up** — the failure is
+silent, which is the one kind this gate exists to prevent.
+
+**3. Two org guids in CDR data do not exist in sso** — `e0153481-…` (cdr1) and
+`2cc4e9e1-…` (cdr_6). A spärr question about either has no organisation behind
+it, and `may_use_other_orgs_rows` cannot be reasoned about for rows whose org is
+unresolvable.
+
+### One thing that is reassuring
+Fingerprinted cdr2–5 in case the four were clones: identical *shape* (100
+patients, 2 629 300 observations each) but **distinct guids** — four different
+`patient_guid` md5s and four different observation samples. Four independent
+seedings of the same generator with disjoint patient sets.
+
+That is what #686's "done when" needs. It asks that a merged federated result
+match the pooled figure; identical data across nodes would have double-counted
+and made the comparison meaningless. It will not.
+
+Read-only throughout. No code changed, no tickets closed.
