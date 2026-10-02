@@ -53,6 +53,25 @@ class CdrEndpoint:
     region_label: str = ""
 
 
+#: CDRs the platform has that analyse does NOT federate, and why.
+#:
+#: This exists because the absence was previously invisible: ``CDR_ENDPOINTS``
+#: simply did not mention cdr1, so the researcher workspace listed five sources
+#: and said nothing about a sixth. A reader could not tell "that CDR does not
+#: exist" from "that CDR is out of scope on purpose" — and the omitted one holds
+#: the real multi-organisation data. A policy that is only expressed by a
+#: variable's absence is a policy nobody can see.
+#:
+#: NOTE this is DESCRIPTIVE, not enforcing. Nothing stops an operator adding
+#: cdr1 to CDR_ENDPOINTS; whether that should be refused in code is an open
+#: question (#734), because it depends on whether the care-delivery / analysis
+#: split is a legal boundary or just current wiring.
+NON_FEDERATED_CDRS = {
+    "cdr1": ("care-delivery CDR — written by gateway.pdhc and read per-patient "
+             "by cd-assist. Not part of the analysis estate (#712)."),
+}
+
+
 class CdrRegistry:
     """In-process registry of CDR endpoints.
 

@@ -30,6 +30,8 @@
   td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
   .dot { display:inline-block; width:.55rem; height:.55rem; border-radius:50%; margin-right:.4rem; }
   .dot.up { background:var(--ok); } .dot.down { background:var(--bad); }
+  .dot.off { background:#c3c8cf; }
+  tr.excluded td { color:var(--muted); }
   .starters { display:grid; grid-template-columns:repeat(auto-fit,minmax(15rem,1fr)); gap:.6rem; }
   .starter { text-align:left; background:#fff; color:var(--ink); border:1px solid var(--border);
              border-radius:5px; padding:.55rem .7rem; cursor:pointer; }
@@ -57,7 +59,9 @@
   <div class="card">
     <h2>Available data</h2>
     <p class="status">Live counts per source. A cohort resolves <em>across</em>
-      these, so this is what any predicate below is matching against.</p>
+      these, so this is what any predicate below is matching against. Sources
+      the platform has but this workspace does not federate are listed too,
+      greyed, with the reason — so an absence is never silent.</p>
     <table id="inv">
       <thead><tr>
         <th>Source</th><th class="num">Patients</th>
@@ -175,6 +179,18 @@ async function loadInventory() {
       + `<td class="num"><b>${fmt(t.fhir_resources)}</b></td>`;
     tb.appendChild(tr);
   }
+  // Sources the platform has but this coordinator does not federate. Shown,
+  // greyed, with the reason — because the first version of this table simply
+  // omitted them, and a reader could not tell "that CDR does not exist" from
+  // "that CDR is deliberately out of scope".
+  for (const x of b.excluded || []) {
+    const tr = document.createElement("tr");
+    tr.className = "excluded";
+    tr.innerHTML = `<td><span class="dot off"></span>${x.cdr_id}</td>`
+      + `<td colspan="3" class="status">not federated — ${x.reason}</td>`;
+    tb.appendChild(tr);
+  }
+
   // Say it plainly when a source is missing: a cohort resolved now would be
   // smaller than the data warrants, and nothing else on the page would show it.
   $("inv-note").textContent = b.mode === "complete"

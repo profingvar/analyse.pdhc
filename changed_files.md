@@ -286,3 +286,7 @@
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/templates/researcher_workspace.html — rewritten: availability table first, question-shaped starters, documented predicate keys, degraded-sources warning, capability summary.
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_inventory.py — NEW, 5 tests.
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_ui.py — 5 landing tests.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/analyse/federation.py — NON_FEDERATED_CDRS: cdr1 named with its reason, marked descriptive not enforcing (#734).
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/analyse/cohort.py — docstring example no longer suggests cdr1.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/routes/researcher.py — /api/inventory returns `excluded`.
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/templates/researcher_workspace.html — excluded sources rendered greyed with reason.

@@ -189,9 +189,21 @@ def inventory():
     or counted as zero. An inventory that silently drops a source would make a
     cohort look smaller than it is for a reason nobody could see.
     """
+    from app.analyse.federation import NON_FEDERATED_CDRS
+    configured = {ep.cdr_id for ep in _registry().all}
+    # Sources the platform HAS but this coordinator does not federate, reported
+    # by name with the reason. Omitting them is what made the first version of
+    # this page misleading: a reader could not tell a CDR that does not exist
+    # from one that is deliberately out of scope, and the excluded one holds the
+    # real multi-organisation data.
+    excluded = [{"cdr_id": k, "reason": v}
+                for k, v in sorted(NON_FEDERATED_CDRS.items())
+                if k not in configured]
+
     registry = _registry()
     if not registry.all:
-        return jsonify({"cdrs": [], "totals": {}, "mode": "empty"}), 200
+        return jsonify({"cdrs": [], "excluded": excluded,
+                        "totals": {}, "mode": "empty"}), 200
 
     response = fanout(registry, method="GET", path="/api/v1/stats", params=None)
     by_id = {r.cdr_id: r for r in response.results}
@@ -214,6 +226,7 @@ def inventory():
     responded = sum(1 for c in cdrs if c["reachable"])
     return jsonify({
         "cdrs": cdrs,
+        "excluded": excluded,
         "totals": totals,
         "cdrs_total": len(cdrs),
         "cdrs_responded": responded,

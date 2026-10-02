@@ -5,7 +5,8 @@ Platform-plan execution §4.3. The researcher's filter dict is shaped
 like::
 
     {
-      "cdr_ids": ["cdr1", "cdr3"],
+      "cdr_ids": ["cdr2", "cdr3"],   # cdr1 is NOT federated — see
+                                     # federation.NON_FEDERATED_CDRS
       "demographics": {
         "age_min": 40, "age_max": 70,
         "sex": "female",

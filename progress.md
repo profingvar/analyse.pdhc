@@ -2008,3 +2008,43 @@ today.
 559 tests pass (was 549). `tests/test_inventory.py` is new (5), plus 5 in
 `test_ui.py` covering ordering, the starters, the wiring, and the
 don't-advertise-what-you-cannot-run rule.
+
+### 2026-10-02 — #688 follow-up: an absent CDR is no longer a silent absence
+
+Operator, reviewing the new landing: *"Why is cdr1 not listed?"* Fair, and the
+page handled it badly.
+
+cdr1 is not in `CDR_ENDPOINTS` — #712 records that as deliberate (it is fed by
+gateway; cdr2-6 are the analysis estate). But the table listed five sources and
+said nothing about a sixth, so a reader could not tell *"that CDR does not
+exist"* from *"that CDR is out of scope on purpose"* — and the omitted one is
+the one holding real multi-organisation data. A panel built to fix blindness
+had a blind spot in it.
+
+- `federation.NON_FEDERATED_CDRS` names cdr1 **with its reason**, as data.
+- `/api/inventory` returns an `excluded` list; the page renders those rows
+  greyed, with the reason, below the totals.
+- The lead sentence no longer implies the table is everything.
+- `cohort.py`'s docstring example said `"cdr_ids": ["cdr1", "cdr3"]` — the
+  code's own documentation pointing a reader at the source the coordinator does
+  not serve. Now `["cdr2", "cdr3"]`, with a pointer to `NON_FEDERATED_CDRS`, and
+  a test that fails if an example ever names a non-federated CDR again.
+
+`NON_FEDERATED_CDRS` is marked **DESCRIPTIVE, NOT ENFORCING**, deliberately, so
+it is not mistaken for a guard.
+
+### The sharper thing underneath — #734
+**Nothing in code enforces the split.** It is one CDR's absence from an
+environment variable. Adding `cdr1=…:9046` to `CDR_ENDPOINTS` would federate
+care-delivery data into research analyses immediately — no refusal, no warning,
+nothing in an audit trail saying the estate changed.
+
+Whether that should be refused in code depends on a question only the operator
+can answer: **is the care-delivery / analysis split a legal boundary, or just
+current wiring?** If it is a boundary, an env var is not adequate protection and
+`CdrRegistry.from_config` should refuse by name — the same fail-closed reasoning
+as #719's `source_clinic_id` and #700's purpose gate. Filed as #734 rather than
+guessed at, because enforcing a boundary that is not one would block legitimate
+future use.
+
+562 tests pass (was 559).

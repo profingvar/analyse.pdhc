@@ -103,3 +103,43 @@ def test_a_non_numeric_count_does_not_crash_or_fake_a_number(monkeypatch):
     b = app.test_client().get("/api/inventory").get_json()
     assert b["cdrs"][0]["patients"] is None
     assert b["cdrs"][0]["health_observations"] == 7
+
+
+def test_a_non_federated_cdr_is_named_with_its_reason(monkeypatch):
+    """cdr1 is absent from CDR_ENDPOINTS on purpose (#712), and the first
+    version of this page simply did not mention it.
+
+    A reader could not distinguish "that CDR does not exist" from "that CDR is
+    deliberately out of scope" — and the omitted one holds the real
+    multi-organisation data. An absence must not be silent.
+    """
+    app = _app_with(monkeypatch, ["cdr2"], [_Res("cdr2", True, _body(10, 20))])
+    b = app.test_client().get("/api/inventory").get_json()
+    ex = {e["cdr_id"]: e["reason"] for e in b["excluded"]}
+    assert "cdr1" in ex
+    assert "care-delivery" in ex["cdr1"]
+    # It is NOT counted — naming it must not quietly inflate the totals.
+    assert b["totals"]["patients"] == 10
+    assert all(c["cdr_id"] != "cdr1" for c in b["cdrs"])
+
+
+def test_a_cdr_that_IS_federated_is_not_also_listed_as_excluded(monkeypatch):
+    """If cdr1 is ever added to CDR_ENDPOINTS, it must stop being reported as
+    out of scope — the two lists cannot both claim it."""
+    app = _app_with(monkeypatch, ["cdr1", "cdr2"], [
+        _Res("cdr1", True, _body(5, 5)), _Res("cdr2", True, _body(10, 20))])
+    b = app.test_client().get("/api/inventory").get_json()
+    assert b["excluded"] == []
+    assert {c["cdr_id"] for c in b["cdrs"]} == {"cdr1", "cdr2"}
+
+
+def test_the_docstring_example_does_not_point_at_a_non_federated_cdr():
+    """app/analyse/cohort.py's example predicate used `["cdr1", "cdr3"]`, which
+    pointed a reader straight at the source this coordinator does not serve."""
+    import app.analyse.cohort as C
+    from app.analyse.federation import NON_FEDERATED_CDRS
+    doc = C.__doc__ or ""
+    example = doc[doc.find('"cdr_ids"'):doc.find('"demographics"')]
+    for cid in NON_FEDERATED_CDRS:
+        assert f'"{cid}"' not in example, (
+            f"the example predicate still suggests {cid}")
