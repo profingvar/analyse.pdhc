@@ -62,10 +62,16 @@ class CdrEndpoint:
 #: the real multi-organisation data. A policy that is only expressed by a
 #: variable's absence is a policy nobody can see.
 #:
-#: NOTE this is DESCRIPTIVE, not enforcing. Nothing stops an operator adding
-#: cdr1 to CDR_ENDPOINTS; whether that should be refused in code is an open
-#: question (#734), because it depends on whether the care-delivery / analysis
-#: split is a legal boundary or just current wiring.
+#: DESCRIPTIVE, not enforcing — and that is now a decision, not an omission.
+#: #734 asked whether the care-delivery / analysis split is a legal boundary or
+#: just current wiring. **Operator 2026-10-02: just wiring, at this stage.** So
+#: nothing refuses cdr1 in code; adding it to CDR_ENDPOINTS federates it, which
+#: is the intended behaviour for now.
+#:
+#: If that ever changes — if the split becomes a basis-for-processing boundary
+#: rather than a deployment choice — the guard belongs in
+#: ``CdrRegistry.from_config`` so it fails at startup by name, not at a call
+#: site mid-analysis. Do not rely on this dict to be that guard.
 NON_FEDERATED_CDRS = {
     "cdr1": ("care-delivery CDR — written by gateway.pdhc and read per-patient "
              "by cd-assist. Not part of the analysis estate (#712)."),
