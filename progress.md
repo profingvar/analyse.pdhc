@@ -2048,3 +2048,39 @@ guessed at, because enforcing a boundary that is not one would block legitimate
 future use.
 
 562 tests pass (was 559).
+
+## 2026-10-06 — #733 `/api/inventory` now says WHAT, not only how much
+
+The counts half shipped under #688. This adds the concept half: a fan-out to
+each CDR's new `/api/v1/concept-inventory`, merged as a UNION keyed on
+`code_canonical`.
+
+- **A concept held by three sources reads as held by three** (`held_by`), never
+  summed into one blob — the same reasoning as the unpooled counts.
+- **Patient counts are deliberately NOT summed.** They arrive already k-floored
+  per CDR, and adding floored values gives a number that is neither the truth
+  nor a floor. The merged entry has no `patients` key at all; a test asserts it.
+- **`binding` survives the merge.** cdr1/cdr6 hold Path-B concept GUIDs, cdr2/cdr3
+  hold termbank LOINC URIs. A merged list that dropped the distinction would show
+  two vocabularies as one and leave the researcher unable to tell which a
+  predicate is written against.
+- **Two units for one concept sets `unit_disagreement`** — the defect the platform
+  could not previously see at all. It fired on first contact with real data
+  (cdr1's "Reliever (SABA) puffs in last 24h": `doser` on 16 rows, `/d` on 1).
+- **A CDR without the endpoint does not break the page** — the counts half still
+  renders. There is a test for exactly that, and it was the live state for the
+  twenty minutes between deploying analyse and deploying the CDRs.
+
+Tests: 567 pass (was 562). LIVE, `mode: complete`, 35 merged concepts across
+cdr2/cdr3/cdr6 (14 external_code + 21 plan_concept); cdr1 correctly reported as
+`excluded` since this coordinator does not federate it (#712).
+
+### Known gaps, filed not fixed
+- **cdr_6's 21 concepts come through with `display: None`**, so a researcher sees
+  bare GUIDs. cdr_6 holds no plan.pdhc client and cdr1 — which does — is not
+  federated, so no display ever reaches the merge for them. Resolving in analyse
+  is the right place (it is the presentation layer and already fans out) but
+  analyse has NO plan-related variable in its `.env`, so this needs an operator
+  config decision, not just code.
+- **The page costs ~13.6s** (cdr3 alone is ~10s cold over 2.6M rows). It needs a
+  short-TTL cache; the inventory changes when data is ingested, not per request.

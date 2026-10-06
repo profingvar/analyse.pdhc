@@ -224,8 +224,63 @@ def inventory():
         cdrs.append(row)
 
     responded = sum(1 for c in cdrs if c["reachable"])
+
+    # WHAT a researcher can ask about, not just how much there is (#733). The
+    # landing page could show counts per source and not one concept name, which
+    # left a predicate to be written blind.
+    #
+    # Merged as a UNION keyed on code_canonical, never summed into one blob: a
+    # concept held by three CDRs should read as present in three. Same reasoning
+    # as the unpooled counts above.
+    concepts: dict[str, dict] = {}
+    try:
+        cr = fanout(registry, method="GET", path="/api/v1/concept-inventory",
+                    params=None)
+        for r in cr.results:
+            if not r.ok or not r.body:
+                continue
+            for c in (r.body.get("concepts") or []):
+                key = c.get("code_canonical")
+                if not key:
+                    continue
+                e = concepts.setdefault(key, {
+                    "code_canonical": key, "display": c.get("display"),
+                    "binding": c.get("binding"),
+                    "concept_guid": c.get("concept_guid"),
+                    "code_system_name": c.get("code_system_name"),
+                    "code": c.get("code"),
+                    "held_by": [], "observations": 0, "units": {}})
+                e["held_by"].append(r.cdr_id)
+                e["observations"] += int(c.get("observations") or 0)
+                e["display"] = e["display"] or c.get("display")
+                # How a code is BOUND decides whether it can be asked about at
+                # all, so it has to survive the merge. cdr1 holds Path-B
+                # concept GUIDs and cdr2/cdr3 hold termbank LOINC URIs; a
+                # merged list that dropped the distinction would show two kinds
+                # of code as one and leave the researcher unable to tell which
+                # vocabulary a predicate is written against.
+                e["binding"] = e["binding"] or c.get("binding")
+                for f in ("concept_guid", "code_system_name", "code"):
+                    e[f] = e[f] or c.get(f)
+                for u, n in (c.get("units") or {}).items():
+                    e["units"][u] = e["units"].get(u, 0) + int(n)
+                # Patient counts are NOT summed. They arrive already k-floored
+                # per CDR, and adding floored values across sources produces a
+                # number that is neither the truth nor a floor.
+    except Exception:                      # noqa: BLE001 — a CDR without the
+        concepts = {}                      # endpoint must not break the page
+
+    concept_list = sorted(concepts.values(), key=lambda c: -c["observations"])
+    for c in concept_list:
+        c["held_by"] = sorted(set(c["held_by"]))
+        if len(c["units"]) > 1:
+            # Two spellings for one concept's unit is a data-integrity defect
+            # the platform could not previously see at all.
+            c["unit_disagreement"] = True
+
     return jsonify({
         "cdrs": cdrs,
+        "concepts": concept_list,
         "excluded": excluded,
         "totals": totals,
         "cdrs_total": len(cdrs),

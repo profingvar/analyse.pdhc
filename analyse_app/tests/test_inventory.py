@@ -143,3 +143,102 @@ def test_the_docstring_example_does_not_point_at_a_non_federated_cdr():
     for cid in NON_FEDERATED_CDRS:
         assert f'"{cid}"' not in example, (
             f"the example predicate still suggests {cid}")
+
+
+# --- #733: WHAT a researcher can ask about, not just how much -------------
+
+class _CRes:
+    def __init__(self, cdr_id, ok, body=None):
+        self.cdr_id, self.ok, self.body = cdr_id, ok, body
+
+
+def _two_fanouts(monkeypatch, ids, stats_results, concept_results):
+    """fanout() is called twice — once for /stats, once for the inventory."""
+    app = make_app()
+    import app.routes.researcher as R
+    monkeypatch.setattr(R, "_registry", lambda: _Reg(ids))
+    calls = {"n": 0}
+
+    def fake(registry, **kw):
+        calls["n"] += 1
+        return _Fan(concept_results if "concept" in (kw.get("path") or "")
+                    else stats_results)
+    monkeypatch.setattr(R, "fanout", fake)
+    return app
+
+
+def _concept(canon, obs, units=None, display=None, patients="<5"):
+    return {"code_canonical": canon, "observations": obs, "patients": patients,
+            "units": units or {}, "display": display}
+
+
+def test_a_concept_held_by_two_cdrs_reads_as_held_by_two(monkeypatch):
+    """Union by code_canonical, never summed into one blob — a concept present
+    in two sources should say so, same reasoning as the unpooled counts."""
+    app = _two_fanouts(monkeypatch, ["cdr2", "cdr3"],
+                       [_Res("cdr2", True, _body(5, 5)), _Res("cdr3", True, _body(5, 5))],
+                       [_CRes("cdr2", True, {"concepts": [_concept("urn:x", 10)]}),
+                        _CRes("cdr3", True, {"concepts": [_concept("urn:x", 7)]})])
+    b = app.test_client().get("/api/inventory").get_json()
+    c = [x for x in b["concepts"] if x["code_canonical"] == "urn:x"][0]
+    assert c["held_by"] == ["cdr2", "cdr3"]
+    assert c["observations"] == 17
+
+
+def test_two_units_for_one_concept_is_flagged(monkeypatch):
+    """The disagreement the platform could not previously see at all — cdr1's
+    'Reliever (SABA) puffs in last 24h' carries both '/d' and 'doser'."""
+    app = _two_fanouts(monkeypatch, ["cdr2"], [_Res("cdr2", True, _body(5, 5))],
+                       [_CRes("cdr2", True, {"concepts": [
+                           _concept("urn:y", 9, units={"/d": 5, "doser": 4})]})])
+    c = app.test_client().get("/api/inventory").get_json()["concepts"][0]
+    assert c.get("unit_disagreement") is True
+    assert c["units"] == {"/d": 5, "doser": 4}
+
+
+def test_patient_counts_are_not_summed_across_cdrs(monkeypatch):
+    """They arrive already k-floored per CDR. Adding floored values gives a
+    number that is neither the truth nor a floor."""
+    app = _two_fanouts(monkeypatch, ["cdr2", "cdr3"],
+                       [_Res("cdr2", True, _body(5, 5)), _Res("cdr3", True, _body(5, 5))],
+                       [_CRes("cdr2", True, {"concepts": [_concept("urn:z", 1)]}),
+                        _CRes("cdr3", True, {"concepts": [_concept("urn:z", 1)]})])
+    c = app.test_client().get("/api/inventory").get_json()["concepts"][0]
+    assert "patients" not in c, "a summed patient count must not be published"
+
+
+def test_a_cdr_without_the_endpoint_does_not_break_the_page(monkeypatch):
+    app = _two_fanouts(monkeypatch, ["cdr2"], [_Res("cdr2", True, _body(5, 5))],
+                       [_CRes("cdr2", False, None)])
+    b = app.test_client().get("/api/inventory").get_json()
+    assert b["concepts"] == []
+    assert b["cdrs"][0]["patients"] == 5, "the counts half must still work"
+
+
+def test_the_merge_keeps_how_each_code_is_bound(monkeypatch):
+    """cdr1 holds Path-B concept GUIDs, cdr2/cdr3 hold termbank LOINC URIs for
+    all 2.6M of their observations. A merged list that dropped `binding` would
+    present the two as one kind and leave a researcher unable to tell which
+    vocabulary a predicate is written against."""
+    LOINC = "https://termbank.pdhc.se/CodeSystem/loinc/41653-7"
+    PLAN = "urn:pdhc:concept/38743fbb-4474-4988-8eeb-292dd9b249a7"
+    app = _two_fanouts(
+        monkeypatch, ["cdr2", "cdr3"],
+        [_Res("cdr2", True, _body(5, 5)), _Res("cdr3", True, _body(5, 5))],
+        [_CRes("cdr2", True, {"concepts": [{
+            "code_canonical": LOINC, "display": "loinc 41653-7",
+            "binding": "external_code", "code_system_name": "loinc",
+            "code": "41653-7", "observations": 2592000,
+            "units": {"mmol/L": 2592000}}]}),
+         _CRes("cdr3", True, {"concepts": [{
+             "code_canonical": PLAN, "display": "B-glucos",
+             "binding": "plan_concept",
+             "concept_guid": "38743fbb-4474-4988-8eeb-292dd9b249a7",
+             "observations": 7134, "units": {"mmol/L": 7134}}]})])
+    b = app.test_client().get("/api/inventory").get_json()
+    by_key = {c["code_canonical"]: c for c in b["concepts"]}
+    assert by_key[LOINC]["binding"] == "external_code"
+    assert by_key[LOINC]["code"] == "41653-7"
+    assert by_key[LOINC]["code_system_name"] == "loinc"
+    assert by_key[PLAN]["binding"] == "plan_concept"
+    assert by_key[PLAN]["concept_guid"]

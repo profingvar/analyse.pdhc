@@ -290,3 +290,7 @@
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/analyse/cohort.py — docstring example no longer suggests cdr1.
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/routes/researcher.py — /api/inventory returns `excluded`.
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/templates/researcher_workspace.html — excluded sources rendered greyed with reason.
+
+## 2026-10-06 — #733 concept fanout
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/routes/researcher.py
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_inventory.py
