@@ -102,7 +102,9 @@ def test_a_non_numeric_count_does_not_crash_or_fake_a_number(monkeypatch):
     ])
     b = app.test_client().get("/api/inventory").get_json()
     assert b["cdrs"][0]["patients"] is None
-    assert b["cdrs"][0]["health_observations"] == 7
+    # #756 renamed the reported key to `observations`; the fallback means a CDR
+    # still sending only the old name is read, not counted as zero.
+    assert b["cdrs"][0]["observations"] == 7
 
 
 def test_a_non_federated_cdr_is_named_with_its_reason(monkeypatch):
@@ -242,3 +244,30 @@ def test_the_merge_keeps_how_each_code_is_bound(monkeypatch):
     assert by_key[LOINC]["code_system_name"] == "loinc"
     assert by_key[PLAN]["binding"] == "plan_concept"
     assert by_key[PLAN]["concept_guid"]
+
+
+def test_inventory_reads_the_live_observation_count(monkeypatch):
+    """#756: cdr1/2/3 reported `health_observations` from an empty legacy table
+    while cdr_6 reported `observations`. The landing showed 0 for every source
+    beside a concept list totalling millions."""
+    app = _app_with(monkeypatch, ["cdr2", "cdr6"], [
+        _Res("cdr2", True, {"patients": 10, "observations": 2629300,
+                            "fhir_resources": 5, "openehr_compositions": 0}),
+        _Res("cdr6", True, {"patients": 11336, "observations": 1285296,
+                            "fhir_resources": 0, "openehr_compositions": 0}),
+    ])
+    b = app.test_client().get("/api/inventory").get_json()
+    rows = {c["cdr_id"]: c for c in b["cdrs"]}
+    assert rows["cdr2"]["observations"] == 2629300
+    assert rows["cdr6"]["observations"] == 1285296
+    assert b["totals"]["observations"] == 2629300 + 1285296
+
+
+def test_a_cdr_not_yet_redeployed_falls_back(monkeypatch):
+    """A CDR still returning only the old key must not read as zero — that is
+    the failure #756 describes, and a rolling deploy would recreate it."""
+    app = _app_with(monkeypatch, ["cdr2"], [
+        _Res("cdr2", True, {"patients": 10, "health_observations": 99,
+                            "fhir_resources": 5, "openehr_compositions": 0})])
+    b = app.test_client().get("/api/inventory").get_json()
+    assert b["cdrs"][0]["observations"] == 99

@@ -208,8 +208,14 @@ def inventory():
     response = fanout(registry, method="GET", path="/api/v1/stats", params=None)
     by_id = {r.cdr_id: r for r in response.results}
 
-    keys = ("patients", "health_observations", "fhir_resources",
+    # #756: `observations` is the live per-type count and the key cdr_6 has
+    # always returned; `health_observations` counts a legacy table that is empty
+    # on every CDR. Reading only the latter showed 0 observations for every
+    # source beside a concept list totalling millions. Prefer the real one, fall
+    # back for a CDR not yet redeployed.
+    keys = ("patients", "observations", "fhir_resources",
             "openehr_compositions")
+    FALLBACK = {"observations": "health_observations"}
     cdrs, totals = [], {k: 0 for k in keys}
     for ep in registry.all:
         r = by_id.get(ep.cdr_id)
@@ -217,6 +223,8 @@ def inventory():
         row = {"cdr_id": ep.cdr_id, "reachable": ok}
         for k in keys:
             v = (r.body.get(k) if ok else None)
+            if v is None and ok and k in FALLBACK:
+                v = r.body.get(FALLBACK[k])
             v = int(v) if isinstance(v, (int, float)) else None
             row[k] = v
             if v:
