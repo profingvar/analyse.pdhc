@@ -2128,3 +2128,41 @@ the authorisation surface — not call edges. `build_platform_graph.py` does rec
 in the graph; it simply is not something the gate blocks on, and a call edge
 grants nobody access to anything. Whether the gate SHOULD track coupling growth
 is a separate design question, not a defect.
+
+## 2026-10-07 — #719 CLOSED: item 1 done, item 2 superseded
+
+**Item 1 (ips ApiKey) verified done.** `IPS_API_KEY` set in
+`analyse_pdhc_app` (length 64), `IPS_BASE_URL=https://ips.pdhc.se`, and
+`deploy/smoke_siblings.py` reports **all 8 checks passed**, including
+`ips: the spärr predicate answers, and the gate fails CLOSED`.
+
+**Item 2 (one `source_clinic_id` per node) is superseded, not pending.** The
+note above said I stopped because ADR-0005 assigns the policy file to the
+organisation behind each CDR and I could not decide that on their behalf. That
+reasoning was sound but the question was the wrong one: **the value does not
+exist at node granularity.**
+
+ips documents the field as "the clinic that **authored** the data"
+(`ips.pdhc/gateway/app/api/blocks_routes.py:408`). Spärr asks about the unit
+whose data is being read — an *inre spärr* hides that unit's own records — so
+the answer is a property of each row's performer, not of the repository.
+
+cdr1 held **six distinct performer organisations** across 7,415 observations
+before the #769 flush (cgm_provider 7,045; CambioCaregiver 328; Provider1 14;
+MeditunerAB 13; 1177 10; and one unknown to sso, 5). A single per-node constant
+would stand in for all six: choosing `cgm_provider` is right for 95% and
+silently wrong for 370 rows; any other choice is wrong for 7,045.
+
+Replacement is per row, from `provider_org_guid` / `author_org_guid` — tracked
+in **#782**. Note #782 also had to correct #768, which proposed taking it from
+`patient_org_guid`: where the patient belongs is irrelevant to whether a given
+clinic's data is blocked. Three organisations, three jobs.
+
+**Stale numbers corrected while closing:** "six sso organisation guids" and "six
+node containers on 9112–9117" predate the destruction of cdr4/cdr5 on
+2026-10-05. It is three CDRs — `CDR_ENDPOINTS=cdr2,cdr3,cdr6`, and the smoke
+confirms `3 endpoint(s)`.
+
+**#712 is now blocked only on data.** The ApiKey is in place and the policy
+field it waited for should not be filled in at all; but all four CDRs measured 0
+observations during #780, so a node topology would compute over nothing.
