@@ -101,6 +101,10 @@ def create_app(config=None) -> Flask:
 
     # --- Consent join (ips.pdhc analysis-filter, research reads) ----------
     app.config.setdefault("IPS_BASE_URL", os.environ.get("IPS_BASE_URL", ""))
+    # #758: plan.pdhc, for concept display names on the researcher inventory.
+    # Declared here because a variable that exists in .env and not in config is
+    # read as absent — exactly how IPS_API_KEY sat unused below.
+    app.config.setdefault("PLAN_BASE_URL", os.environ.get("PLAN_BASE_URL", ""))
     # IPS_API_KEY was READ from config (node/service.py, node/reader.py) but
     # never PUT there from the environment, so #719's operator instruction —
     # "the key then goes in analyse.pdhc .env as IPS_API_KEY" — could not

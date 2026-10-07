@@ -294,3 +294,9 @@
 ## 2026-10-06 — #733 concept fanout
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/routes/researcher.py
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_inventory.py
+
+## 2026-10-07 — #758 concept display names
+- analyse_app/app/analyse/concept_display.py (new)
+- analyse_app/app/__init__.py (PLAN_BASE_URL into config)
+- analyse_app/app/routes/researcher.py (fill_displays on the merged list)
+- analyse_app/tests/test_concept_display.py (new)

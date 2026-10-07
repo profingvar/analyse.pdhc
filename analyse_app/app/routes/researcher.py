@@ -189,6 +189,7 @@ def inventory():
     or counted as zero. An inventory that silently drops a source would make a
     cohort look smaller than it is for a reason nobody could see.
     """
+    from app.analyse.concept_display import fill_displays
     from app.analyse.federation import NON_FEDERATED_CDRS
     configured = {ep.cdr_id for ep in _registry().all}
     # Sources the platform HAS but this coordinator does not federate, reported
@@ -279,6 +280,13 @@ def inventory():
         concepts = {}                      # endpoint must not break the page
 
     concept_list = sorted(concepts.values(), key=lambda c: -c["observations"])
+
+    # #758: give the plan-bound concepts their names. cdr1 resolves its own but
+    # is not federated here (#712), and cdr_6 holds no plan client — so without
+    # this its 21 concepts render as bare GUIDs. Cosmetic and fail-open: if
+    # plan.pdhc is unreachable the list keeps its GUIDs rather than the page
+    # failing.
+    fill_displays(concept_list, current_app.config.get("PLAN_BASE_URL") or "")
     for c in concept_list:
         c["held_by"] = sorted(set(c["held_by"]))
         if len(c["units"]) > 1:

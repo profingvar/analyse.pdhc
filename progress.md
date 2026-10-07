@@ -2084,3 +2084,47 @@ cdr2/cdr3/cdr6 (14 external_code + 21 plan_concept); cdr1 correctly reported as
   config decision, not just code.
 - **The page costs ~13.6s** (cdr3 alone is ~10s cold over 2.6M rows). It needs a
   short-TTL cache; the inventory changes when data is ingested, not per request.
+
+## 2026-10-07 — #758 the merged inventory shows names, not GUIDs
+
+cdr_6's 21 concepts rendered as bare GUIDs: cdr1 resolves its own displays but is
+not federated here (#712), and cdr_6 holds no plan client. A GUID is not an
+answer to "what can I ask about".
+
+Operator added `PLAN_BASE_URL=http://host.docker.internal:9030` to analyse's
+`.env` — the same address cdr1 and cdr2 use, verified reachable from the
+container (200) before it was written. It also had to be declared in
+`app.config`: a variable present in `.env` and absent from config reads as
+unset, which is exactly how `IPS_API_KEY` sat unused (#719).
+
+`app/analyse/concept_display.py` resolves via plan's
+`CodeSystem/$lookup`, matching cdr1's `PlanClient.lookup_display`:
+
+- **cosmetic, therefore fail-open** — plan being down keeps the GUIDs; a missing
+  name is a smaller loss than a missing source
+- **a transient failure is not cached**, a clean "no display" is. Caching a
+  reachability blip would blank every name for an hour
+- **bounded** at 200 lookups in a 6-worker pool — 21 today, but a reseed could
+  make it hundreds, and an unbounded fan-out at a sibling is a denial of service
+  with extra steps (same reasoning as `node/reader.py`)
+- only `plan_concept` entries are looked up: an `external_code` already names
+  itself, an `unbound` code resolves nowhere by definition
+
+Live:
+
+    387,530  Systolic blood pressure
+    387,530  Diastolic blood pressure
+    329,522  Fasting plasma glucose
+    121,729  Hemoglobin A1c (IFCC)
+     55,518  Creatinine
+
+579 tests pass, 10 new.
+
+### Correcting the ticket's own expectation
+#758 said the #748 baseline would need updating for the new analyse→plan edge.
+It does not: the baseline tracks **identities, authenticates and allowlists** —
+the authorisation surface — not call edges. `build_platform_graph.py` does record
+`analyse.pdhc → plan.pdhc calls via PLAN_BASE_URL`, so the dependency is visible
+in the graph; it simply is not something the gate blocks on, and a call edge
+grants nobody access to anything. Whether the gate SHOULD track coupling growth
+is a separate design question, not a defect.
