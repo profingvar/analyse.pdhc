@@ -1,6 +1,27 @@
-Flask>=3.0
-Flask-SQLAlchemy>=3.1
-Flask-Migrate>=4.0
+# ---------------------------------------------------------------------------
+# PINNED (#785) 2026-10-08 — frozen at what the RUNNING container had installed,
+# not at a fresh resolve. The point is to make the working state reproducible,
+# not to adopt newer versions: choosing versions is a separate, reviewable
+# decision.
+#
+# Why: `docker-compose up -d --build` is mandatory wherever the Dockerfile does
+# `COPY . .`, and on an unpinned service that same command silently
+# re-resolves every dependency. A four-file template deploy to sso.pdhc did
+# exactly that and moved bcrypt 4.x -> 5.0.0 — a major bump that, had its hash
+# format changed, would have presented as "wrong password" platform-wide rather
+# than as a failed deploy.
+#
+# LIMIT, stated: these are the DIRECT dependencies. Transitive ones still
+# float, so a rebuild is reproducible for everything named here and not beyond
+# it. A full `pip freeze` or a constraints file is the next step if that
+# matters.
+#
+# To change a version, change it here deliberately and redeploy — do not
+# loosen a pin to let a rebuild pick something newer.
+# ---------------------------------------------------------------------------
+Flask==3.1.3
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.1.0
 # Pinned below 2.1 deliberately. SQLAlchemy 2.1 changed the DEFAULT
 # driver for a bare `postgresql://` URL from psycopg2 to psycopg v3,
 # which is not installed here. An unpinned `>=2.0` therefore built
@@ -9,17 +30,17 @@ Flask-Migrate>=4.0
 # passing, because the local venv still held 2.0.51.
 # The URL is also explicit about the driver now (docker-compose.yml),
 # so either of the two guards alone is sufficient.
-SQLAlchemy>=2.0,<2.1
-alembic>=1.13
-psycopg2-binary>=2.9
-gunicorn>=21.0
-requests>=2.31
+SQLAlchemy==2.0.54
+alembic==1.20.0
+psycopg2-binary==2.9.13
+gunicorn==26.2.0
+requests==2.34.2
 # #644: analysis spec models + JSON Schema generation.
 # Verified to have a Python 3.14 wheel (ADR-0004 asks for that check).
-pydantic>=2.7
+pydantic==2.13.5
 # #647: reference distributions (t, chi-square) only — not computation
 # over data. Verified to have a Python 3.14 wheel. See ADR-0008 for why
 # there is no Polars or DuckDB here.
-scipy>=1.14
+scipy==1.18.1
 # #648: node policy files, owned by the organisation behind each CDR.
-PyYAML>=6.0
+PyYAML==6.0.3
