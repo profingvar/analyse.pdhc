@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json as _json
 import pathlib
+import re
 import sys
 import time
 
@@ -37,6 +38,65 @@ import time
 # from the working directory — the same trap as the hash-stability test fixed
 # earlier today, which passed from analyse_app/ and failed from the repo root.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+#: #804: every path this smoke probes -> the client module that builds it.
+#:
+#: analyse's smoke was the one whose INVENTED path motivated gateway's guard
+#: (`fhir/Observation` for `/api/v1/fhir/Observation`), and it was the only one
+#: of the three smokes with no guard of its own. The path is correct today --
+#: observations_search.py:120 really does say `/api/v1/fhir/Observation` -- so
+#: this is not fixing a live bug; it is keeping a fixed one fixed.
+#:
+#: `%s` stands for a path parameter. Templates, not bare strings, because the
+#: spärr path has a guid in the middle and checking only its tail would accept
+#: a wrong prefix -- which is the very mistake being guarded against.
+PROBED_PATHS = {
+    "/api/v1/fhir/Observation": "analyse/observations_search.py",
+    "/api/v1/patients/%s/blocks/check": "node/reader.py",
+}
+
+#: Probed but built INLINE in this script rather than by a client module, so
+#: there is nothing to check them against. Listed so the set of unguarded
+#: probes is visible instead of merely absent:
+#:   /healthz      per-CDR liveness, composed in the check below
+#:   /api/health   sso liveness, composed in the check below
+#: Both are bare liveness pings with no contract to drift from. A path that
+#: carries data belongs in PROBED_PATHS, not here.
+INLINE_PATHS = ("/healthz", "/api/health")
+
+
+def _client_root() -> pathlib.Path:
+    """Where the client modules live, in the image AND in a checkout.
+
+    The image is /app/app/... while a checkout is <repo>/analyse_app/app/...,
+    so one hardcoded relative path resolves in only one of them. gateway's
+    guard had exactly this problem and therefore could not be run before a
+    deploy, which is when it would have been worth running (#804).
+    """
+    here = pathlib.Path(__file__).resolve().parent.parent
+    for cand in (here / "app", here / "analyse_app" / "app"):
+        if cand.is_dir():
+            return cand
+    return here / "app"
+
+
+def _path_appears_in_client(template: str, src: str) -> bool:
+    """Is `template` a path this client actually builds?
+
+    ANCHORED on the first literal fragment. A bare `in` check is not enough and
+    cannot catch the bug this exists for: `fhir/Observation` IS a substring of
+    `/api/v1/fhir/Observation`, so a truncated prefix passes. In every client
+    the path starts right after the base-URL placeholder or an opening quote,
+    so requiring one of } " ' before it rejects the truncation while still
+    accepting the real thing.
+    """
+    frags = [f for f in template.split("%s") if f]
+    if not frags:
+        return False
+    if not re.search(r"""[}"']""" + re.escape(frags[0]), src):
+        return False
+    return all(f in src for f in frags[1:])
+
 
 RESET, RED, GRN, YEL, BOLD = "\033[0m", "\033[31m", "\033[32m", "\033[33m", "\033[1m"
 
@@ -66,6 +126,27 @@ def main(as_json: bool = False) -> int:
 
         cfg = current_app.config
         endpoints = cfg.get("CDR_ENDPOINTS") or []
+
+        # ── #804: do the probed paths exist in the clients? ──
+        # First, deliberately. A smoke that calls a path production never uses
+        # is a green light wired to nothing, and finding that out before the
+        # network calls makes the report readable.
+        @check("paths: every probed path appears in its client module")
+        def _():
+            root = _client_root()
+            missing = []
+            for template, mod in PROBED_PATHS.items():
+                f = root / mod
+                if not f.exists():
+                    missing.append(f"{mod} is missing (looked in {root})")
+                    continue
+                if not _path_appears_in_client(template,
+                                               f.read_text(encoding="utf-8")):
+                    missing.append(f"{template} does not START a URL in {mod}")
+            return (not missing), (
+                f"all {len(PROBED_PATHS)} anchored to a URL boundary in their "
+                f"clients; {len(INLINE_PATHS)} inline liveness paths unguarded "
+                f"by design" if not missing else "; ".join(missing))
 
         # ── config that the calls depend on ──
         @check("config: CDR_ENDPOINTS is populated")
