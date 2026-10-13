@@ -164,7 +164,7 @@ async function loadInventory() {
     const dot = `<span class="dot ${c.reachable ? "up" : "down"}"></span>`;
     tr.innerHTML = `<td>${dot}${c.cdr_id}</td>`
       + `<td class="num">${fmt(c.patients)}</td>`
-      + `<td class="num">${fmt(c.health_observations)}</td>`
+      + `<td class="num">${fmt(c.observations)}</td>`
       + `<td class="num">${fmt(c.fhir_resources)}</td>`;
     if (!c.reachable) tr.querySelectorAll("td.num").forEach(td => td.textContent = "unreachable");
     tb.appendChild(tr);
@@ -175,7 +175,7 @@ async function loadInventory() {
     const t = b.totals || {};
     const tr = document.createElement("tr");
     tr.innerHTML = `<td><b>Total</b></td><td class="num"><b>${fmt(t.patients)}</b></td>`
-      + `<td class="num"><b>${fmt(t.health_observations)}</b></td>`
+      + `<td class="num"><b>${fmt(t.observations)}</b></td>`
       + `<td class="num"><b>${fmt(t.fhir_resources)}</b></td>`;
     tb.appendChild(tr);
   }

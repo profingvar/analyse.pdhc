@@ -302,3 +302,4 @@
 - analyse_app/tests/test_concept_display.py (new)
 /Users/martiningvar/T7_sidewinder/analyse.pdhc/deploy/smoke_siblings.py
 - 2026-10-13 analyse_app/app/__init__.py — #816: SESSION_COOKIE_SECURE/HTTPONLY/SAMESITE
+- 2026-10-13 analyse_app/app/templates/researcher_workspace.html — observations column read the legacy health_observations key the API no longer emits (#756 fixed the backend only)
