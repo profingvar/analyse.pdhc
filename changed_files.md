@@ -301,3 +301,4 @@
 - analyse_app/app/routes/researcher.py (fill_displays on the merged list)
 - analyse_app/tests/test_concept_display.py (new)
 /Users/martiningvar/T7_sidewinder/analyse.pdhc/deploy/smoke_siblings.py
+- 2026-10-13 analyse_app/app/__init__.py — #816: SESSION_COOKIE_SECURE/HTTPONLY/SAMESITE
