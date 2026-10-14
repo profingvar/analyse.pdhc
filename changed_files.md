@@ -303,3 +303,7 @@
 /Users/martiningvar/T7_sidewinder/analyse.pdhc/deploy/smoke_siblings.py
 - 2026-10-13 analyse_app/app/__init__.py — #816: SESSION_COOKIE_SECURE/HTTPONLY/SAMESITE
 - 2026-10-13 analyse_app/app/templates/researcher_workspace.html — observations column read the legacy health_observations key the API no longer emits (#756 fixed the backend only)
+- 2026-10-14 analyse_app/app/services/ips_client.py — #825: search_patients(); _service_headers() so registry AND consent calls authenticate with ApiKey (ips ignores X-Service-Key)
+- 2026-10-14 analyse_app/app/routes/researcher.py — #825: the demographic predicate resolves against ips, 503 fail-closed
+- 2026-10-14 analyse_app/tests/test_cohort_resolves_against_ips.py (NEW)
+- 2026-10-14 analyse_app/tests/conftest.py — the ips fake gained search_patients + an ips_patients fixture

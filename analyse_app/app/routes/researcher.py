@@ -105,6 +105,42 @@ def _resolve_members(filt: CohortFilter) -> tuple[set[str], dict]:
     per_predicate_sets: list[set[str]] = []
     summary = {"predicates": []}
     for resource_type, params in to_predicate_searches(filt):
+        # #825: the demographic predicate is answered by ips, which owns the
+        # patient registry. The clinical predicates (Condition,
+        # MedicationStatement) still fan out to the CDRs, which do hold those.
+        if resource_type == "Patient":
+            # ips unreachable -> 503, fail closed. Same direction as the
+            # consent filter below and as the node's spärr check: a cohort
+            # must never silently become "everyone" because a sibling is
+            # down. 503 and not an unhandled 500, because a caller cannot
+            # tell a 500 from the service being down — the exact confusion
+            # that made #730 look like a sibling outage.
+            try:
+                ids = _ips_client().search_patients(
+                    age_min=filt.age_min, age_max=filt.age_max, sex=filt.sex,
+                    # Rule 24 travels with the question. An admin sends None
+                    # ("no scoping"); everyone else sends their own
+                    # organisations, and an empty list matches NOBODY rather
+                    # than everybody.
+                    organisation_guids=(
+                        None if auth.get("is_admin")
+                        else [g for g in (auth.get("org_guids") or "").split(",") if g]),
+                )
+            except IpsUnreachable as e:
+                current_app.logger.error("patient registry unavailable: %s", e)
+                abort(503, description=(
+                    "the patient registry (ips.pdhc) is unavailable, so this "
+                    "cohort cannot be resolved — it fails closed rather than "
+                    "matching everyone"))
+            per_predicate_sets.append(ids)
+            summary["predicates"].append({
+                "resource_type": "Patient", "source": "ips.pdhc",
+                "params": {k: v for k, v in params.items()
+                           if k not in ("_count",)},
+                "matched": len(ids),
+            })
+            continue
+
         resp = fanout(
             _registry(),
             method="GET",

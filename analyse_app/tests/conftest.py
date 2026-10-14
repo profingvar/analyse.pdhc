@@ -46,10 +46,33 @@ def _allow_all_consent(monkeypatch):
     exercise the federation/gate flow, not consent — patch the client to an
     allow-all verdict (same seam dashboard.pdhc patches)."""
     from app.routes import researcher as r
-    fake = type("C", (), {"analysis_filter": staticmethod(
-        lambda guids, purpose, projects=None: {
-            "allowed": list(guids), "excluded": []})})()
+    fake = type("C", (), {
+        "analysis_filter": staticmethod(
+            lambda guids, purpose, projects=None: {
+                "allowed": list(guids), "excluded": []}),
+        # #825: the DEMOGRAPHIC predicate is answered by ips now, not by
+        # fanning out GET /api/v1/fhir/Patient across the CDRs — no CDR has
+        # ever held a Patient resource. Tests that care about exactly who
+        # matches set `ips_patients`; the default is the three the shared
+        # route stubs use.
+        "search_patients": staticmethod(
+            lambda **kw: set(IPS_PATIENTS)),
+    })()
     monkeypatch.setattr(r, "_ips_client", lambda: fake)
+
+
+#: Patients ips reports as matching a demographic predicate, for tests.
+IPS_PATIENTS = {"p1", "p2", "p3"}
+
+
+@pytest.fixture
+def ips_patients(monkeypatch):
+    """Set which patients ips says match. Returns a setter."""
+    def _set(guids):
+        globals()["IPS_PATIENTS"] = set(guids)
+    original = set(IPS_PATIENTS)
+    yield _set
+    globals()["IPS_PATIENTS"] = original
 
 
 @pytest.fixture

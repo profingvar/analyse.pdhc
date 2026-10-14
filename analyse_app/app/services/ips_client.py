@@ -106,9 +106,16 @@ class IpsClient:
         service_key: str | None = None,
         base_url: str | None = None,
         timeout: float = DEFAULT_TIMEOUT,
+        api_key: str | None = None,
     ):
         self.token = token
         self.service_key = service_key
+        # ips's require_auth reads ONLY the `Authorization` header and accepts
+        # exactly two schemes, `Bearer` and `ApiKey`. It IGNORES
+        # `X-Service-Key` — which is why a service-to-service call that sets
+        # only that header gets 401 and looks like a credential problem rather
+        # than a scheme problem. Registry queries use this key.
+        self.api_key = api_key
         self.base_url = (
             base_url or os.environ.get("IPS_BASE_URL", "")
         ).rstrip("/")
@@ -122,6 +129,29 @@ class IpsClient:
         if self.service_key:
             h["X-Service-Key"] = self.service_key
         h.update(outbound_session_headers())
+        return h
+
+    def _service_headers(self) -> dict:
+        """Headers for a SERVICE-to-service question, not a user action.
+
+        ips's `require_auth` reads ONLY the `Authorization` header and accepts
+        exactly two schemes, `Bearer` and `ApiKey`. It IGNORES
+        `X-Service-Key`, so a call that sets only that header is a 401 that
+        looks like a bad credential rather than an unsupported scheme. That
+        has bitten this platform three times now: the node's spärr check
+        (#717, which 404'd on a bulk endpoint and then had this same header
+        problem), the patient registry search, and the analysis consent
+        filter.
+
+        Both callers here ask a question ABOUT a reader rather than acting AS
+        one — the reader's organisations, purpose and research projects travel
+        in the request BODY — so the service credential is the right one, and
+        the call no longer depends on the browsing user's SSO token happening
+        to be in this service's session.
+        """
+        h = dict(self._headers())
+        if self.api_key:
+            h["Authorization"] = f"ApiKey {self.api_key}"
         return h
 
     def fetch_active_blocks(self, patient_guid: str) -> list[Block]:
@@ -201,6 +231,49 @@ class IpsClient:
         except ValueError:
             return None
 
+    def search_patients(self, *, age_min=None, age_max=None, sex=None,
+                        organisation_guids=None) -> set[str]:
+        """POST /api/v1/patients/search (#825) — which patients match a
+        DEMOGRAPHIC predicate. Returns a set of patient guids.
+
+        ips owns the registry, so ips answers this. The researcher workspace
+        used to resolve a cohort by fanning out `GET /api/v1/fhir/Patient`
+        across the CDRs, and no CDR has ever held a Patient resource — nothing
+        on the platform writes one. Every cohort therefore resolved to the
+        EMPTY SET on every predicate. Measured 2026-10-13: cdr1/cdr2/cdr3 each
+        0 rows in `patient`, while cdr2/cdr3 held 30 patients' worth of
+        observations apiece.
+
+        `organisation_guids` carries Rule 24 scoping to the registry, so ips
+        decides what a reader may see rather than this service. Pass `[]` for
+        a reader with no organisations — it matches nobody. Pass None only for
+        an admin, where it means "no scoping".
+
+        Raises ``IpsUnreachable`` on any network error or non-200, so a cohort
+        fails CLOSED. The reverse would hand a reader the whole population the
+        moment a sibling went down.
+        """
+        if not self.base_url:
+            raise IpsUnreachable("IPS_BASE_URL not configured")
+        body: dict = {}
+        if age_min is not None:
+            body["age_min"] = age_min
+        if age_max is not None:
+            body["age_max"] = age_max
+        if sex:
+            body["sex"] = sex
+        if organisation_guids is not None:
+            body["organisation_guids"] = list(organisation_guids)
+        url = f"{self.base_url}/api/v1/patients/search"
+        try:
+            r = requests.post(url, json=body, headers=self._service_headers(),
+                              timeout=self.timeout)
+        except requests.RequestException as e:
+            raise IpsUnreachable(f"patient search network error: {e}") from e
+        if r.status_code != 200:
+            raise IpsUnreachable(f"patient search returned {r.status_code}")
+        return {str(g) for g in ((r.json() or {}).get("patient_guids") or [])}
+
     def analysis_filter(
         self,
         patient_guids: list,
@@ -228,7 +301,7 @@ class IpsClient:
                     "purpose": purpose,
                     "research_project_guids": list(research_project_guids or []),
                 },
-                headers=self._headers(),
+                headers=self._service_headers(),
                 timeout=self.timeout,
             )
         except requests.RequestException as e:
@@ -331,6 +404,7 @@ def _default_client() -> IpsClient:
         token=token,
         service_key=current_app.config.get("ANALYSE_PDHC_SERVICE_KEY") or None,
         base_url=current_app.config.get("IPS_BASE_URL") or None,
+        api_key=current_app.config.get("IPS_API_KEY") or None,
     )
 
 
