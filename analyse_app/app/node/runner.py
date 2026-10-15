@@ -102,7 +102,9 @@ def run_spec(spec: AnalysisSpec, policy: NodePolicy, reader: NodeReader, *,
 
     if not eligible:
         run.notes.append(
-            "No patients in this cohort could be read at this source.")
+            "No patient in this cohort could be read at this source: every "
+            "one of them has blocked it. Loosening the cohort criteria will "
+            "not change that.")
         return run
 
     # 4 — read, purpose declared so the consent join runs; 503 propagates
@@ -110,11 +112,20 @@ def run_spec(spec: AnalysisSpec, policy: NodePolicy, reader: NodeReader, *,
         purpose=spec.purpose.value, patient_guids=eligible,
         research_projects=research_projects)
 
-    # The CDR's consent filter may return fewer patients than were asked for.
+    # The CDR returned fewer patients than were asked for. WHY it did is not
+    # knowable from here, and the key says so rather than guessing.
+    #
+    # It used to be recorded as `excluded["consent"]`. The CDR does apply the
+    # consent join to what it returns (#422), so consent is one cause — but a
+    # patient with no observation of the requested concept is withheld by
+    # exactly the same silence. Observed on a real cdr2 run 2026-10-14: a
+    # source holding nothing for a cohort reported eight consent exclusions
+    # that had not happened. A consent exclusion count is precisely the kind
+    # of number that gets quoted, so it must not include absences.
     seen = {r.get("patient_guid") for r in rows if r.get("patient_guid")}
-    withheld = len(set(eligible) - seen)
-    if withheld:
-        run.excluded["consent"] = withheld
+    not_returned = len(set(eligible) - seen)
+    if not_returned:
+        run.excluded["not_returned"] = not_returned
 
     # 5a — COARSEN. #824: this step was in the docstring above and in no
     # code. Rows arrive from the CDR carrying `effectiveDateTime`, a raw
@@ -139,10 +150,18 @@ def run_spec(spec: AnalysisSpec, policy: NodePolicy, reader: NodeReader, *,
         # Not an exclusion — an undated row still counts toward a mean or a
         # frequency, it just cannot be placed on a time axis. Reported so a
         # flat trend is distinguishable from an undated one.
+        #
+        # Deliberately WITHOUT the count. `coordinator/merge.py` shows node
+        # notes verbatim, which bypasses the disclosure pass that guards the
+        # figures, and its own audit note says every emittable note is
+        # structural with the single exception of a GROUP count the analyst
+        # declared. An observation count is derived from the data: at a
+        # source holding one patient it is that patient's observation count,
+        # published around k_min rather than through it.
         run.notes.append(
-            f"{undated} observation(s) at this source carry no usable date, "
-            f"so they are absent from any time-based result while still "
-            f"counting in the rest.")
+            "Some observations at this source carry no usable date, so they "
+            "are absent from any time-based result while still counting in "
+            "the rest.")
 
     # 5b — pseudonymise, then project. Pseudonym first, so the raw guid is
     # gone before a record is built rather than being carried and dropped.
@@ -169,8 +188,25 @@ def run_spec(spec: AnalysisSpec, policy: NodePolicy, reader: NodeReader, *,
     run.n_patients = len({p["pid"] for p in projected if p.get("pid")})
 
     if not projected:
-        run.notes.append(
-            "No patient at this source meets the cohort criteria.")
+        # Name the gate that actually emptied it. This used to say "meets the
+        # cohort criteria" unconditionally, which is the WRONG sentence
+        # whenever the cohort was emptied by consent or by spärr instead —
+        # and it is the one sentence a researcher acts on, by going and
+        # loosening criteria that were never the problem. Observed on a real
+        # run against cdr2 2026-10-14: 8 of 8 patients excluded by consent,
+        # reported as nobody meeting the criteria.
+        if excluded_by_cohort:
+            run.notes.append(
+                "No patient at this source meets the cohort criteria.")
+        elif run.excluded.get("not_returned"):
+            run.notes.append(
+                "This source returned nothing for any patient in the cohort "
+                "— either it holds no such observations, or the consent gate "
+                "withheld them. Loosening the cohort criteria will not "
+                "change that.")
+        else:
+            run.notes.append(
+                "No patient at this source meets the cohort criteria.")
         return run
 
     # 7 + 8 — compute, then suppress before anything leaves

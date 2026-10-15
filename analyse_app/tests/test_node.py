@@ -256,12 +256,20 @@ class TestRunOrdering:
         assert "p7" not in reader.asked_for
         assert run.excluded["blocked"] == 2
 
-    def test_consent_withholding_is_counted(self):
+    def test_patients_the_cdr_did_not_return_are_counted(self):
+        """Counted as `not_returned`, not as `consent`. The CDR does apply
+        the consent join to what it returns (#422), but a patient with no
+        observation of the requested concept is withheld by exactly the same
+        silence — and a consent-exclusion count is the kind of number that
+        gets quoted, so it must not include absences. Seen for real on cdr2
+        2026-10-14: a source holding nothing for a cohort reported eight
+        consent exclusions that had not happened."""
         reader = self.FakeReader(self._rows(10))      # CDR returns only 10
         run = run_spec(_spec(), _policy(), reader, project_key=KEY,
                        ips_base_url="http://ips",
                        cohort=[f"p{i}" for i in range(20)])
-        assert run.excluded["consent"] == 10
+        assert run.excluded["not_returned"] == 10
+        assert "consent" not in run.excluded
 
     def test_the_run_returns_partials_not_rows(self):
         reader = self.FakeReader(self._rows(30))

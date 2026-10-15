@@ -324,3 +324,5 @@
 - analyse_app/tests/test_node.py        (repointed the three mocked-verb tests; 3 new classes)
 - analyse_app/tests/test_node_coarsen.py (NEW)
 - analyse_app/tests/test_analysis_surface.py (#725 notes no longer rely on an undated fixture; + the positive trend test)
+- analyse_app/app/node/runner.py        (#806 run findings: the undated note carries no count; an empty result names the gate; excluded["consent"] -> ["not_returned"])
+- analyse_app/tests/test_node.py        (the withholding test follows the rename)

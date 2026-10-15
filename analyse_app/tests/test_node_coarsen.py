@@ -307,8 +307,104 @@ class TestTheNodeRunnerActuallyCallsIt:
         run = self._run(rows)
         assert any("no usable date" in n for n in run.notes), run.notes
 
+    def test_the_undated_note_carries_NO_COUNT(self):
+        """`coordinator/merge.py` shows node notes verbatim, bypassing the
+        disclosure pass that guards the figures — so a note must not carry a
+        number derived from the data. At a source holding one patient, an
+        observation count IS that patient's observation count."""
+        rows = [_row(patient=f"p{i}", when=None) for i in range(1, 7)]
+        note = [n for n in self._run(rows).notes if "no usable date" in n][0]
+        assert not any(ch.isdigit() for ch in note), note
+
     def test_no_calendar_date_reaches_a_partial(self):
         rows = [_row(patient=f"p{i}", when=f"2026-05-{d:02d}", value=float(d))
                 for i in range(1, 7) for d in (1, 11, 21)]
         blob = str(self._run(rows).to_json())
         assert "2026-05" not in blob
+
+
+class TestAnEmptyResultNamesTheGateThatEmptiedIt:
+    """Found on a real run against cdr2, 2026-10-14. All 8 patients were
+    excluded by the consent gate and the node reported "No patient at this
+    source meets the cohort criteria" — the one sentence a researcher acts
+    on, and it points at the wrong thing. They would go and loosen criteria
+    that were never the problem, and the numbers would not move.
+    """
+
+    def _spec(self, **over):
+        from app.spec import AnalysisSpec
+        base = {
+            "title": "t", "purpose": "statistics", "sources": ["cdr1"],
+            "cohort": {"include": [{"observation": "c", "op": ">=",
+                                    "value": 0}]},
+            "variables": [{"name": "v", "from": "c", "agg": "mean"}],
+            "analyses": [{"type": "describe", "vars": ["v"]}],
+        }
+        base.update(over)
+        return AnalysisSpec.model_validate(base)
+
+    def _policy(self):
+        from app.node import NodePolicy
+        return NodePolicy.load(
+            "node_id: cdr1\ncdr_base_url: http://x\n"
+            "permitted_purposes: [statistics]\n"
+            "permitted_analyses: [describe]\nk_min: 1\n", is_text=True)
+
+    class _Reader:
+        def __init__(self, rows, blocked=(), withheld=()):
+            self.rows = rows
+            self.blocked = set(blocked)
+            self.withheld = set(withheld)
+
+        def excluded_by_spärr(self, guids, ips_base_url, **kw):
+            return {g for g in guids if g in self.blocked}
+
+        def read_observations(self, *, purpose, patient_guids, **kw):
+            wanted = set(patient_guids) - self.withheld
+            return [dict(r) for r in self.rows if r["patient_guid"] in wanted]
+
+    def _run(self, reader, cohort, spec=None):
+        from app.node import run_spec
+        from app.privacy import ProjectKey
+        return run_spec(spec or self._spec(), self._policy(), reader,
+                        project_key=ProjectKey("p", b"k" * 32),
+                        ips_base_url="http://ips", ips_api_key="k",
+                        cohort=cohort)
+
+    def test_a_source_that_RETURNED_NOTHING_is_not_blamed_on_the_criteria(self):
+        rows = [_row(patient="p1"), _row(patient="p2")]
+        run = self._run(self._Reader(rows, withheld={"p1", "p2"}),
+                        ["p1", "p2"])
+        note = " ".join(run.notes)
+        assert "returned nothing" in note
+        assert "will not change that" in note
+
+    def test_the_withheld_count_is_NOT_labelled_consent(self):
+        """The CDR does apply the consent join, but a patient with no
+        observation of the requested concept is withheld by the same silence
+        — so a count that conflates them must not be called a consent
+        exclusion. It is exactly the number someone would quote."""
+        rows = [_row(patient="p1")]
+        run = self._run(self._Reader(rows, withheld={"p1"}), ["p1"])
+        assert "consent" not in run.excluded
+        assert run.excluded == {"not_returned": 1}
+
+    def test_SPÄRR_is_named_when_a_block_emptied_it(self):
+        rows = [_row(patient="p1")]
+        run = self._run(self._Reader(rows, blocked={"p1"}), ["p1"])
+        assert run.excluded == {"blocked": 1}
+        assert "has blocked it" in " ".join(run.notes)
+
+    def test_the_COHORT_CRITERIA_sentence_survives_for_its_own_case(self):
+        rows = [_row(patient="p1", value=1.0)]
+        spec = self._spec(cohort={"include": [
+            {"observation": "c", "op": ">=", "value": 999}]})
+        run = self._run(self._Reader(rows), ["p1"], spec=spec)
+        assert run.excluded.get("cohort") == 1
+        assert "meets the cohort criteria" in " ".join(run.notes)
+
+    def test_an_EMPTY_source_offers_BOTH_explanations_and_neither_falsely(self):
+        run = self._run(self._Reader([]), ["p1"])
+        note = " ".join(run.notes)
+        assert "holds no such observations" in note
+        assert "consent gate withheld them" in note
