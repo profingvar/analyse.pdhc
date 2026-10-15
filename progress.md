@@ -2245,3 +2245,87 @@ by writing a block into production ips. That write is the operator's call.
   the Observation resource, so the FHIR search cannot carry it; the reader maps
   the DECLARED `performer` instead, and the projection allowlist drops even
   that unless a spec variable names `meta.author_org`.
+
+---
+
+## #826 — the node stops fanning out one request per patient (2026-10-15)
+
+`PATIENTS_PER_REQUEST` 1 -> **100**. A 60-patient cohort over three concepts is
+3 requests per CDR instead of 180.
+
+It was 1 because `patient=<a>,<b>` returned ZERO ROWS on every deployed CDR.
+#826 deployed `_requested_patients` to **all four endpoints this client can
+reach** — cdr1, cdr2, cdr3 and cdr_6 — each verified against production by
+reading the returned SUBJECTS back. cdr_6 needed its own patch; it is a
+different codebase, and patching three while leaving it single-valued would
+have put the defect on exactly one federation member, which is worse than all
+three because the pooled figure would still look reasonable.
+
+### 100, not the 500 the CDRs advertise — and that is measured
+All four CDRs run gunicorn at the default `limit_request_line = 4094`; a guid
+plus its separator is 37 bytes. Bisected against cdr1:
+
+    n=105 -> 200
+    n=110 -> 400  "Request Line is too large"   (gunicorn, HTML body)
+
+So `MAX_PATIENT_ALLOWLIST = 500` is unreachable and the CDRs' own "batch a
+larger cohort" message is dead code — filed as **#831**. 100 guids is ~3.8 KB,
+which also fits nginx's default 8 KB header buffer: **#830** will repoint these
+reads from `host.docker.internal` onto the public subdomains, putting the
+reverse proxy's limit in the path too.
+
+The test asserts the REQUEST LINE LENGTH, not the constant, because the
+constant is only a proxy for the thing that actually breaks.
+
+### The second-order defect this introduced, and the fix
+Batching moved cdr's page ceiling from per-patient to per-batch. Measured on
+cdr2: ~650 rows per patient with no concept filter, so a **46-patient batch
+reaches `MAX_COUNT = 30000`** and `_search` refuses — correctly, since cdr has
+no offset parameter and `Bundle.total` reports the page size.
+
+So the batch size alone would have turned a working cohort read into a hard
+failure at around 46 patients, and only on the larger cohorts. Measured against
+the unsplit code: a 40-patient batch raises `ReadError`; with the split it
+returns all 40000 rows for all 40 patients.
+
+`TruncatedRead` is now a `ReadError` subclass and `_read_batch` recovers by
+subdividing — half the cohort is half the rows, and the two halves together are
+the same answer. A subclass rather than a flag because of what the caller can DO
+about it. Splitting rather than a smaller fixed batch because row density is a
+property of the DATA, not of the client. A batch that fits is not split at all.
+
+A SINGLE patient filling the page still raises: nothing left to subdivide, and a
+statistic over an unknown fraction of one patient's rows reads exactly like a
+real one. A cohort in which one patient is too large refuses the WHOLE read,
+deliberately — the alternative is silently dropping that patient, which changes
+the cohort without saying so.
+
+### Verified on production
+The real `NodeReader`, not a mock — which is the point, since #823's broken
+client passed 579 mocked tests:
+
+    cdr2  30 patients in ONE batch -> 19490 rows, 30 distinct, nothing outside
+    cdr3  30 patients in ONE batch -> 19509 rows, 30 distinct, nothing outside
+    cdr6  0 observations (purged 2026-10-09) — unit tests + structural probes
+
+cdr2 holds exactly 30 patients / 19490 rows, under the 30000 ceiling, so a real
+split cannot be triggered on live data; the 7 splitting tests and the direct
+before/after measurement cover it.
+
+### Deploy
+The release dir was from 2026-09-30 and the container was AHEAD of it — last
+session's #823/#824/#825 work was `docker cp`'d in. A `--build` would have
+reverted all of it with a green health check. All 81 tracked `app/` files were
+hashed first: the container differed from git in `reader.py` comments only, the
+release dir in exactly 6 files, and nothing on the server was unique. Then sync
+-> rebuild. Dependencies are 11/11 pinned, so the rebuild did not move them.
+
+Rollback: image `analyse_pdhc-app:pre826`, source
+`miserver:~/backups/predeploy/analyse.pdhc/pre826_20261015T115250Z.tgz`.
+
+### Tests
+654 pass (was 646). `tests/test_node_batch_splitting.py` is new (7), and two
+existing tests that pinned the one-per-request shape now pin the batching —
+including that batching drops nobody and asks about nobody twice, because a
+cohort quietly shorter than the spec named produces a figure that looks
+entirely reasonable.
