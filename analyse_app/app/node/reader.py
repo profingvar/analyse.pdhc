@@ -32,9 +32,9 @@ bearing, each measured rather than assumed:
   ``fhir_read._requested_patients``, 500 per request) and **that code is
   deployed nowhere**: measured 2026-10-14 against cdr1 and cdr2,
   ``patient=<a>,<b>`` returns ZERO rows on both, because the deployed
-  version matches the whole comma string as one guid. A single guid returns
-  only that patient's rows on both, verified by reading the subjects back
-  rather than counting. So this client fans out one request per patient —
+  version matches the whole comma string as one guid (#826). A single guid
+  returns only that patient's rows on both, verified by reading the subjects
+  back rather than counting. So this client fans out one request per patient —
   the same shape ``excluded_by_spärr`` uses for the same reason. Narrowing
   server-side is not an optimisation here: the node excludes spärr-blocked
   patients BEFORE it reads, and that ordering is the security argument, so
@@ -86,10 +86,13 @@ DEFAULT_TIMEOUT = 30.0
 
 #: How many patients this client asks about at once. ONE, because the
 #: deployed CDRs honour a single `patient` guid and return zero rows for a
-#: comma-separated list — see the module docstring. When #701's
-#: `_requested_patients` is actually deployed this becomes a batch size and
-#: the fan-out collapses into one request per 500 patients; until then a
-#: larger value reads nothing, silently.
+#: comma-separated list — see the module docstring, and #826, which is the
+#: deployment gap itself. When `_requested_patients` is actually deployed
+#: this becomes a batch size and the fan-out collapses into one request per
+#: 500 patients; until then a larger value reads nothing, silently. Do not
+#: raise it on the evidence of cdr.pdhc's source — that is the mistake #826
+#: documents. Verify by reading the returned SUBJECTS back, never by
+#: counting rows.
 PATIENTS_PER_REQUEST = 1
 
 #: Concurrent reads against one CDR. Bounded, because an unbounded pool
