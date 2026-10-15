@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Any
 
 from app.node import NodePolicy
@@ -25,6 +26,10 @@ from app.privacy import ProjectKey
 #: Deliberately unmistakable. The scanner flags TEST- ids on sight, so
 #: synthetic data reaching a real output is caught rather than blending in.
 PATIENT_PREFIX = "TEST-P"
+
+#: A fixed, obviously-synthetic epoch. Fixed so a harness run is reproducible
+#: from its seed, including the day offsets.
+_START = datetime(2026, 1, 1)
 
 
 @dataclass
@@ -73,6 +78,11 @@ def build(*, nodes: int = 3, patients: int = 2000, seed: int = 0,
           **policy_over) -> list[SynthSource]:
     """N sources holding disjoint slices of one synthetic population."""
     rnd = random.Random(seed)
+    # A SEPARATE stream for the dates. Drawing them from `rnd` would shift
+    # every subsequent value, and several suites pin populations tuned to
+    # this seed (the 4/4/2 k_min split in test_analysis_surface, for one) —
+    # so adding a date would silently re-roll every cohort.
+    dates = random.Random(seed ^ 0x5A17)
     sources: list[SynthSource] = []
     per = max(1, patients // nodes)
 
@@ -83,7 +93,15 @@ def build(*, nodes: int = 3, patients: int = 2000, seed: int = 0,
             # A per-patient level plus noise, so a mean is meaningful and an
             # SD is not degenerate.
             level = rnd.gauss(10, 3)
-            for _ in range(rnd.randint(*obs_per_patient)):
+            # #824: every row used to carry `effective_at: None`, so the
+            # harness drove the whole node path with an undated population
+            # and nothing it produced could exercise a window, a trend or
+            # the coarsen step that was missing. A per-patient enrolment
+            # date, deliberately spread across a year, is what makes the
+            # offsets differ per patient — which is the property that a
+            # cohort-wide zero point would have hidden.
+            enrolled = _START + timedelta(days=dates.randrange(365))
+            for n in range(rnd.randint(*obs_per_patient)):
                 rows.append({
                     "patient_guid": pid,
                     # #696: real rows carry the concept, and cohort criteria
@@ -93,7 +111,11 @@ def build(*, nodes: int = 3, patients: int = 2000, seed: int = 0,
                     "concept": concept,
                     "value": round(level + rnd.gauss(0, 1.5), 4),
                     "unit": "L",
-                    "effective_at": None,
+                    # An ISO string with a trailing Z, because that is what
+                    # cdr emits — a date object here would have let a
+                    # string-parsing bug through.
+                    "effective_at": (enrolled + timedelta(days=n * 7)
+                                     ).isoformat() + "Z",
                     "meta": {"author_org": f"org-{i}"},
                     "demographics": {"sex": rnd.choice(["female", "male"])},
                 })

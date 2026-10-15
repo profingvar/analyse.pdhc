@@ -14,7 +14,7 @@ from .disclosure import (
 )
 from .coarsen import (
     DEFAULT_AGE_BAND_YEARS, CoarsenError, TimeGrain, age_band, calendar,
-    coarsen_record, day_offset,
+    coarsen_record, coarsen_rows, day_offset, index_events,
 )
 from .projection import (
     NEVER_PROJECTABLE, STRUCTURAL_FIELDS, ProjectionError, build_allowlist,
@@ -29,6 +29,7 @@ __all__ = [
     "STRUCTURAL_FIELDS", "NEVER_PROJECTABLE",
     "ProjectKey", "pseudonymise", "pseudonymise_all", "PSEUDONYM_HEX_LEN",
     "day_offset", "calendar", "age_band", "coarsen_record", "TimeGrain",
+    "coarsen_rows", "index_events",
     "CoarsenError", "DEFAULT_AGE_BAND_YEARS",
     "DisclosurePolicy", "DisclosureError", "SuppressedTable", "SUPPRESSED",
     "suppress_counts", "suppress_table", "safe_summary", "safe_correlation",

@@ -8,8 +8,15 @@ out rather than implied:
     3. spärr       — drop blocked patients BEFORE any read
     4. read        — through the platform read service, purpose declared, so
                      the consent join runs and fails closed
-    5. project     — allowlist, constructive
-    6. coarsen     — quasi-identifiers narrowed
+    5a. coarsen    — quasi-identifiers narrowed. BEFORE projection, not
+                     after, and #824 is the reason: the allowlist does not
+                     name `effective_at`, so a projected record no longer
+                     holds the field the coarsening reads. "Project then
+                     coarsen" is only satisfiable if the step that PRODUCES
+                     an allowlisted field (`day_offset`) runs first.
+    5b. project    — allowlist, constructive. Still the last gate: it admits
+                     only what it names, so a date that survived coarsening
+                     cannot get past it.
     6b. cohort     — apply the spec's inclusion criteria (#696); the list the
                      node started from is a CANDIDATE list, not the cohort
     7. compute     — sufficient statistics only
@@ -28,7 +35,8 @@ from typing import Any
 
 from app.engine import REGISTRY
 from app.node.frame import build as build_frame, series
-from app.privacy import ProjectKey, build_allowlist, project, pseudonymise
+from app.privacy import (
+    ProjectKey, build_allowlist, coarsen_rows, project, pseudonymise)
 from app.privacy.disclosure import DisclosurePolicy
 from app.spec import AnalysisSpec
 
@@ -108,7 +116,35 @@ def run_spec(spec: AnalysisSpec, policy: NodePolicy, reader: NodeReader, *,
     if withheld:
         run.excluded["consent"] = withheld
 
-    # 5 — pseudonymise, then project. Pseudonym first, so the raw guid is
+    # 5a — COARSEN. #824: this step was in the docstring above and in no
+    # code. Rows arrive from the CDR carrying `effectiveDateTime`, a raw
+    # calendar date, and every longitudinal analysis reads `day_offset`
+    # instead — so without this, `_in_window` excluded every row and a trend
+    # over 90 days of real data computed over nothing, silently.
+    #
+    # The zero point is the spec's own `index_event` — the patient's first
+    # observation of that concept. #824 recorded that field as not existing;
+    # it does, and `AnalysisSpec` already REFUSES a spec that uses
+    # `window_days` or `over_time` without one. `privacy/coarsen.py` records
+    # why it is per patient (the analyst holds the concept, not the date, so
+    # there is no inverse) and what happens to a patient who has no
+    # observation of it: no zero point, so their rows stay undated rather
+    # than being aligned to something else and pooled as though they were
+    # not.
+    rows, undated = coarsen_rows(
+        rows,
+        index_concept=(spec.index_event.observation
+                       if spec.index_event else None))
+    if undated:
+        # Not an exclusion — an undated row still counts toward a mean or a
+        # frequency, it just cannot be placed on a time axis. Reported so a
+        # flat trend is distinguishable from an undated one.
+        run.notes.append(
+            f"{undated} observation(s) at this source carry no usable date, "
+            f"so they are absent from any time-based result while still "
+            f"counting in the rest.")
+
+    # 5b — pseudonymise, then project. Pseudonym first, so the raw guid is
     # gone before a record is built rather than being carried and dropped.
     allowlist = build_allowlist(spec)
     projected = []
@@ -231,9 +267,14 @@ def _dispatch(module, analysis, frame, rows, spec, policy: NodePolicy,
         var = _variable(spec, analysis.var)
         points = series(rows, var)
         if not points:
+            # `series` drops a row for three different reasons: wrong
+            # concept, outside the variable's window, or undated. Naming only
+            # the last one was accurate while #824 left every row undated and
+            # is misleading now that it does not.
             raise DispatchError(
-                f"'over_time' has no dated observations of '{analysis.var}' at "
-                f"this source, so there is nothing to plot.")
+                f"'over_time' has no observations of '{analysis.var}' that "
+                f"can be placed on a time axis at this source, so there is "
+                f"nothing to plot.")
         return module.local(points, bin_days=analysis.bin_days,
                             range_days=analysis.range_days,
                             source=policy.node_id)

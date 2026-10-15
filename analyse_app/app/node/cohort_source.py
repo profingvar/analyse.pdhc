@@ -20,10 +20,13 @@ things are missing for that, neither of them transport:
 1. **The node runner never applies `spec.cohort` at all.** `run_spec()` takes
    an already-resolved list of patient guids; the spec's inclusion criteria
    are not read by anything on the node path. That predates this ticket.
-2. **The CDR exposes no patient-listing or criterion-search endpoint** that a
-   node could use to answer "which of your patients match this". The node's
-   read client speaks to `/api/v1/observations/search`, which needs the
-   patient guids it is meant to produce.
+2. **The CDR exposes no patient-listing endpoint** that a node could use to
+   answer "which of your patients match this". It can narrow a cohort it is
+   already given — `GET /api/v1/fhir/Observation` takes a `patient`
+   allowlist, a `code` and a `value-quantity` predicate — but every one of
+   those needs the patient guids it is meant to produce. (Corrected by #823:
+   this used to say the read client speaks to `/api/v1/observations/search`.
+   It did, and no CDR has ever served that path.)
 
 `ConfiguredCohortSource` is therefore what a real deployment gets today: the
 operator pins the cohort per node. That is a real limitation, written down

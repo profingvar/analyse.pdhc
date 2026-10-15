@@ -266,11 +266,26 @@ class TestSuppressionReachesTheReader:
 class TestTheNodesExplanationSurvives:
     """#725. combine() read everything from a node run except its notes."""
 
+    #: An over_time whose variable is windowed outside the data, so `series`
+    #: returns no points at any source and every node reports the same note.
+    #:
+    #: It used to be enough to ask for over_time at all: #824 left every
+    #: synthetic row undated, so the plot was empty everywhere and these two
+    #: tests passed over a pipeline that could not place a single observation
+    #: on a time axis. The harness now carries real dates, so the emptiness
+    #: has to be ASKED FOR — which is the honest version of this test, since
+    #: what is under test is that a node's explanation survives `combine()`,
+    #: not that over_time is broken.
+    _EMPTY_OVER_TIME = dict(
+        index_event={"observation": "x"},
+        variables=[{"name": "matvarde", "from": "x", "agg": "max",
+                    "window_days": [900, 1000]},
+                   {"name": "kon", "from": "demographics.sex"}],
+        analyses=[{"type": "over_time", "var": "matvarde",
+                   "bin_days": 30, "range_days": [0, 90]}])
+
     def test_a_node_note_reaches_the_page(self, app, client):
-        spec = _suppressing_spec(
-            index_event={"observation": "x"},
-            analyses=[{"type": "over_time", "var": "matvarde",
-                       "bin_days": 30, "range_days": [0, 90]}])
+        spec = _suppressing_spec(**self._EMPTY_OVER_TIME)
         r = client.post("/analysis/run?format=json", json=spec)
         assert r.status_code == 200
         payload = r.get_json()
@@ -280,15 +295,27 @@ class TestTheNodesExplanationSurvives:
         assert any("over_time" in n for n in payload["notes"])
 
     def test_one_problem_at_three_sources_is_one_line(self, app, client):
-        spec = _suppressing_spec(
-            index_event={"observation": "x"},
-            analyses=[{"type": "over_time", "var": "matvarde",
-                       "bin_days": 30, "range_days": [0, 90]}])
+        spec = _suppressing_spec(**self._EMPTY_OVER_TIME)
         notes = client.post("/analysis/run?format=json",
                             json=spec).get_json()["notes"]
         over = [n for n in notes if "over_time" in n]
         assert len(over) == 1, f"repeated once per source: {over}"
         assert "Every source" in over[0]
+
+    def test_over_time_DOES_plot_when_the_dates_are_in_range(self, app, client):
+        """The other half, and the one that could not be written before #824:
+        a trend over dated observations now produces a block instead of a
+        note. Without this, "the note reaches the page" is satisfied by a
+        pipeline that never plots anything."""
+        spec = _suppressing_spec(
+            index_event={"observation": "x"},
+            analyses=[{"type": "over_time", "var": "matvarde",
+                       "bin_days": 30, "range_days": [0, 90]}])
+        payload = client.post("/analysis/run?format=json",
+                              json=spec).get_json()
+        kinds = [b["kind"] for b in payload["blocks"]]
+        assert "over_time" in kinds, (
+            f"a trend over dated rows produced nothing: {payload['notes']}")
 
     def test_the_double_counting_warning_is_actually_shown(self, app, client):
         """linkage_sentence was written, tested, and never called."""

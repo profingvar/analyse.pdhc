@@ -313,3 +313,14 @@
 - analyse_app/app/services/ips_client.py (#825: search_patients; service-key headers on all three ips calls)
 - analyse_app/tests/conftest.py          (fake ips gained search_patients + patient_has_block)
 - analyse_app/tests/test_cohort_resolves_against_ips.py (NEW)
+
+## 2026-10-14 — #823 + #824 the node's read path
+- analyse_app/app/node/reader.py        (#823: GET /api/v1/fhir/Observation, batching, truncation + allowlist guards, Bundle->row mapping)
+- analyse_app/app/node/runner.py        (#824: step 5a coarsen, before projection; over_time note reworded)
+- analyse_app/app/node/cohort_source.py (#823: the stale endpoint claim corrected)
+- analyse_app/app/privacy/coarsen.py    (#824: index_events + coarsen_rows)
+- analyse_app/app/privacy/__init__.py   (exports)
+- analyse_app/app/testing/synth.py      (#824: the harness now carries real dates, from a separate RNG stream)
+- analyse_app/tests/test_node.py        (repointed the three mocked-verb tests; 3 new classes)
+- analyse_app/tests/test_node_coarsen.py (NEW)
+- analyse_app/tests/test_analysis_surface.py (#725 notes no longer rely on an undated fixture; + the positive trend test)
