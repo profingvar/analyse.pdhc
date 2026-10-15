@@ -307,3 +307,9 @@
 - 2026-10-14 analyse_app/app/routes/researcher.py — #825: the demographic predicate resolves against ips, 503 fail-closed
 - 2026-10-14 analyse_app/tests/test_cohort_resolves_against_ips.py (NEW)
 - 2026-10-14 analyse_app/tests/conftest.py — the ips fake gained search_patients + an ips_patients fixture
+
+## 2026-10-14 — #825 cohort resolution against ips + the missing spärr check
+- analyse_app/app/routes/researcher.py  (#825: Patient predicate -> ips; COHORT_PURPOSE=statistics; NEW _apply_sparr)
+- analyse_app/app/services/ips_client.py (#825: search_patients; service-key headers on all three ips calls)
+- analyse_app/tests/conftest.py          (fake ips gained search_patients + patient_has_block)
+- analyse_app/tests/test_cohort_resolves_against_ips.py (NEW)

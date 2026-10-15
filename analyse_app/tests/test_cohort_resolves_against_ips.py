@@ -74,6 +74,10 @@ def test_an_unreachable_ips_FAILS_CLOSED(client, app):
         def search_patients(**kw):
             raise IpsUnreachable("ips is down")
 
+        @staticmethod
+        def patient_has_block(guid):
+            return False
+
     with patch.object(r, "_ips_client", lambda: _Broken()):
         resp = client.post("/api/cohort",
                            json={"cdr_ids": [], "demographics": {"age_min": 40}})
@@ -97,6 +101,10 @@ def test_the_demographic_predicate_is_PASSED_THROUGH_to_ips(client):
         def search_patients(**kw):
             seen.update(kw)
             return {"p1"}
+
+        @staticmethod
+        def patient_has_block(guid):
+            return False          # no spärr registered
 
     with patch.object(r, "_ips_client", lambda: _Spy()):
         client.post("/api/cohort", json={
@@ -123,6 +131,10 @@ def test_rule_24_scope_travels_with_the_question(client):
         def search_patients(**kw):
             seen.update(kw)
             return set()
+
+        @staticmethod
+        def patient_has_block(guid):
+            return False
 
     with patch.object(r, "_ips_client", lambda: _Spy()):
         client.post("/api/cohort", json={"cdr_ids": [], "demographics": {}})
@@ -227,3 +239,73 @@ def test_the_CONSENT_filter_also_authenticates_as_the_service():
     with patch("app.services.ips_client.requests.post", side_effect=_post):
         c.analysis_filter(["p1"], "research", [])
     assert seen["Authorization"] == "ApiKey the-ips-key"
+
+
+def test_a_patient_with_an_active_sparr_is_EXCLUDED(client, ips_patients, ips_blocked):
+    """The cohort path had no spärr check at all — it lived only in the node
+    path, and no node is deployed. So the only path in use read across sources
+    without ever asking whether a patient had blocked them. Harmless only
+    while no spärr exists, which is a property of today's data, not the code.
+    """
+    ips_patients({"a", "b", "c"})
+    ips_blocked({"b"})
+    with patch("app.analyse.federation.requests.request",
+               side_effect=_no_cdr_calls):
+        r = client.post("/api/cohort", json={"cdr_ids": [], "demographics": {}})
+    assert r.status_code == 201
+    assert r.get_json()["n"] == 2, "the blocked patient stayed in the cohort"
+
+
+def test_an_UNANSWERABLE_sparr_verdict_excludes_the_patient(client, ips_patients):
+    """`patient_has_block` returns None when ips cannot answer. None must
+    EXCLUDE: an aggregate computed over a blocked patient has used their data
+    even if the number is later discarded, so an unknown verdict is treated as
+    blocked rather than clear."""
+    from app.routes import researcher as r
+
+    class _Unanswering:
+        @staticmethod
+        def analysis_filter(guids, purpose, projects=None):
+            return {"allowed": list(guids), "excluded": []}
+
+        @staticmethod
+        def search_patients(**kw):
+            return {"x", "y"}
+
+        @staticmethod
+        def patient_has_block(guid):
+            return None            # ips could not answer
+
+    with patch.object(r, "_ips_client", lambda: _Unanswering()):
+        resp = client.post("/api/cohort",
+                           json={"cdr_ids": [], "demographics": {}})
+    assert resp.get_json()["n"] == 0, (
+        "an unanswerable spärr verdict let patients into the cohort")
+
+
+def test_the_declared_purpose_is_statistics_not_research(client, ips_patients):
+    """`research` demands a per-project consent intersection that nothing on
+    this platform can satisfy — sso has ZERO research_projects — so every
+    cohort came back empty with `no_research_consent`, for every user, with no
+    way to configure around it. Both purposes are EHDS secondary purposes, so
+    an opt-out still excludes either way; only the project join differs."""
+    from app.routes import researcher as r
+    seen = {}
+
+    class _Spy:
+        @staticmethod
+        def analysis_filter(guids, purpose, projects=None):
+            seen["purpose"] = purpose
+            return {"allowed": list(guids), "excluded": []}
+
+        @staticmethod
+        def search_patients(**kw):
+            return {"p1"}
+
+        @staticmethod
+        def patient_has_block(guid):
+            return False
+
+    with patch.object(r, "_ips_client", lambda: _Spy()):
+        client.post("/api/cohort", json={"cdr_ids": [], "demographics": {}})
+    assert seen["purpose"] == "statistics"

@@ -199,7 +199,8 @@ class IpsClient:
         url = f"{self.base_url}/api/v1/patients/{patient_guid}/blocks/check"
         try:
             r = requests.get(url, params={"source_clinic_id": source_clinic_id},
-                             headers=self._headers(), timeout=self.timeout)
+                             headers=self._service_headers(),
+                             timeout=self.timeout)
         except requests.RequestException:
             return None
         if r.status_code != 200:
@@ -221,7 +222,7 @@ class IpsClient:
             return None
         url = f"{self.base_url}/api/v1/patients/{patient_guid}/blocks/metadata"
         try:
-            r = requests.get(url, headers=self._headers(), timeout=self.timeout)
+            r = requests.get(url, headers=self._service_headers(), timeout=self.timeout)
         except requests.RequestException:
             return None
         if r.status_code != 200:

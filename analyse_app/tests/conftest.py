@@ -57,12 +57,31 @@ def _allow_all_consent(monkeypatch):
         # route stubs use.
         "search_patients": staticmethod(
             lambda **kw: set(IPS_PATIENTS)),
+        # No spärr registered, which is the platform's state today. A test
+        # that wants a block sets `ips_blocked`. Returning None here would
+        # fail CLOSED and exclude everyone, which is correct behaviour but
+        # models an ips outage rather than an unblocked patient.
+        "patient_has_block": staticmethod(
+            lambda guid: guid in IPS_BLOCKED),
     })()
     monkeypatch.setattr(r, "_ips_client", lambda: fake)
 
 
 #: Patients ips reports as matching a demographic predicate, for tests.
 IPS_PATIENTS = {"p1", "p2", "p3"}
+
+#: Patients with an active spärr. Empty by default — the platform has none.
+IPS_BLOCKED: set = set()
+
+
+@pytest.fixture
+def ips_blocked(monkeypatch):
+    """Set which patients have an active spärr. Returns a setter."""
+    def _set(guids):
+        globals()["IPS_BLOCKED"] = set(guids)
+    original = set(IPS_BLOCKED)
+    yield _set
+    globals()["IPS_BLOCKED"] = original
 
 
 @pytest.fixture

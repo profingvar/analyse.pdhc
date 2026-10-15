@@ -19,6 +19,7 @@ against the federation. Resolution stages:
 from __future__ import annotations
 
 import csv
+from concurrent.futures import ThreadPoolExecutor
 import io
 import json
 import uuid
@@ -173,27 +174,108 @@ def _resolve_members(filt: CohortFilter) -> tuple[set[str], dict]:
     members = intersect_patient_sets(per_predicate_sets) if per_predicate_sets else set()
     members, consent_summary = _apply_research_consent(members)
     summary["consent"] = consent_summary
+    members, sparr_summary = _apply_sparr(members)
+    summary["sparr"] = sparr_summary
     return members, summary
 
 
-def _apply_research_consent(members: set[str]) -> tuple[set[str], dict]:
-    """EHDS opt-out + per-project research-consent join (#415/#422).
+def _apply_sparr(members: set[str]) -> tuple[set[str], dict]:
+    """Drop patients with an active spärr, BEFORE anything is aggregated.
 
-    Every cohort member set passes through ips's analysis-filter with
-    purpose=research before it is persisted or aggregated — ips owns the
-    consent flags (D1 #404), so the verdict is never computed locally.
-    ips unreachable → 503, fail closed: no verdict, no research read."""
+    This path had no spärr check at all. It lived only in `app/node/runner.py`,
+    and no node is deployed (`ANALYSE_ROLE=coordinator`), so the researcher
+    workspace — the only path actually in use — read across sources without
+    ever asking whether a patient had blocked them. Harmless only for as long
+    as no spärr exists anywhere, which is a property of today's DATA, not of
+    the code.
+
+    The operator's stated policy is "if there is no spärr, an admin with
+    analysis privilege may run the analysis". That is right, and it requires
+    the absence to be CHECKED rather than assumed — otherwise the first
+    registered block is read straight through.
+
+    `blocks/metadata` is the correct predicate here: it is relationship-free
+    (any authenticated caller), returns only a count, and leaks nothing about
+    WHICH sources are blocked. A cohort statistic reads across sources, so any
+    active block excludes the patient — the conservative reading, and the one
+    that matches "no spärr" meaning "none at all".
+
+    Fails CLOSED per patient: `patient_has_block` returns None when ips could
+    not answer, and None excludes. An aggregate computed over a blocked
+    patient has used their data even if the number is later discarded.
+    """
+    if not members:
+        return members, {"checked": 0, "excluded": 0, "unanswered": 0}
+
+    client = _ips_client()
+    guids = sorted(members)
+
+    def _one(guid: str):
+        return guid, client.patient_has_block(guid)
+
+    blocked, unanswered = set(), 0
+    # Bounded, like the node's spärr fan-out. An unbounded pool against a
+    # sibling is a denial of service with extra steps.
+    with ThreadPoolExecutor(max_workers=min(8, len(guids))) as pool:
+        for guid, verdict in pool.map(_one, guids):
+            if verdict is None:
+                unanswered += 1
+                blocked.add(guid)
+            elif verdict:
+                blocked.add(guid)
+
+    return members - blocked, {
+        "checked": len(guids),
+        "excluded": len(blocked),
+        "unanswered": unanswered,
+    }
+
+
+#: The purpose this workspace declares to ips.
+#:
+#: `statistics`, not `research`, and the distinction is not cosmetic.
+#: `evaluate_patient` treats BOTH as EHDS secondary purposes, so an
+#: `ehds_opt_out` patient is excluded either way. The ONLY thing `research`
+#: adds is a per-project consent intersection: the patient's
+#: `consented_research_projects` must overlap the READER's affiliation
+#: projects.
+#:
+#: Declaring `research` here was therefore claiming something this workspace
+#: does not do. It is not project-bound research against a named protocol; it
+#: is an admin with analysis-segment privilege running a cohort statistic. And
+#: because the platform has ZERO rows in sso's `research_projects`, the
+#: intersection could never be non-empty — every cohort came back empty with
+#: `no_research_consent`, for every user, with no way to configure around it.
+#:
+#: A genuine project-bound read should declare `research` and take the
+#: consent join. That belongs to the path that knows it is doing research,
+#: not to this one, which does not.
+COHORT_PURPOSE = "statistics"
+
+
+def _apply_research_consent(members: set[str]) -> tuple[set[str], dict]:
+    """EHDS opt-out (and, for a research purpose, the per-project consent
+    join) — #415/#422.
+
+    Every cohort member set passes through ips's analysis-filter before it is
+    persisted or aggregated — ips owns the consent flags (D1 #404), so the
+    verdict is never computed locally. ips unreachable → 503, fail closed: no
+    verdict, no read.
+
+    See COHORT_PURPOSE for why this declares `statistics`.
+    """
     if not members:
         return members, {"checked": 0, "excluded": 0, "reasons": {}}
     blob = getattr(g, "access_blob", None) or {}
     projects = research_project_guids(blob) if isinstance(blob, dict) else []
     try:
         verdict = _ips_client().analysis_filter(
-            sorted(members), "research", projects)
+            sorted(members), COHORT_PURPOSE, projects)
     except IpsUnreachable as e:
         current_app.logger.error("analysis-filter unavailable: %s", e)
         abort(503, description=(
-            "consent filter (ips.pdhc) unavailable — research reads fail closed"))
+            "consent filter (ips.pdhc) unavailable — secondary-use reads "
+            "fail closed"))
     allowed = set(verdict["allowed"])
     reasons: dict[str, int] = {}
     for ex in verdict["excluded"]:
