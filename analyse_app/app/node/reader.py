@@ -154,6 +154,23 @@ class ReadError(RuntimeError):
     pass
 
 
+class TruncatedRead(ReadError):
+    """The CDR filled its maximum page, so this answer is incomplete.
+
+    A subclass rather than a flag because of what the caller can DO about it:
+    a batch of patients can be split and re-read, and a single patient cannot.
+    So `read_observations` recovers from this by subdividing, and only lets it
+    escape when one patient alone fills the page — at which point the read is
+    genuinely unanswerable and refusing is the honest outcome.
+
+    Measured 2026-10-15, which is why this exists: cdr2 returns ~650 rows per
+    patient with no concept filter, so a 46-patient batch reaches MAX_COUNT.
+    Batching the cohort (#826) moved the row budget from per-patient to
+    per-batch, and without this the change would have turned a working
+    cohort read into a hard failure at around 46 patients.
+    """
+
+
 class ConsentUnavailable(ReadError):
     """The consent filter could not answer. Reads fail CLOSED."""
 
@@ -211,8 +228,7 @@ class NodeReader:
 
         def _one(item):
             batch, code = item
-            return self._rows(self._search(batch, code, headers),
-                              allowed=set(batch))
+            return self._read_batch(batch, code, headers)
 
         rows: list[dict[str, Any]] = []
         with ThreadPoolExecutor(
@@ -223,6 +239,38 @@ class NodeReader:
             for chunk in pool.map(_one, work):
                 rows.extend(chunk)
         return rows
+
+    def _read_batch(self, batch: list[str], code: str | None,
+                    headers: dict[str, str]) -> list[dict[str, Any]]:
+        """Read one (patient batch x concept), SPLITTING on truncation.
+
+        cdr has no offset parameter and `Bundle.total` reports the page size,
+        so a full page cannot be distinguished from a complete answer and
+        must never be reported over. But it is recoverable when more than one
+        patient was asked about: half the cohort is half the rows, and the two
+        halves together are the same answer.
+
+        Splitting rather than lowering PATIENTS_PER_REQUEST because row
+        density is a property of the DATA, not of the client — cdr2 returns
+        ~650 rows per patient unfiltered and far fewer with a concept filter,
+        so any fixed batch size is either wasteful or occasionally too large.
+        This adapts to what the CDR actually returns.
+
+        A single patient that fills the page is NOT recoverable and is raised:
+        there is nothing left to subdivide, and a statistic over an unknown
+        fraction of one patient's rows reads exactly like a real one.
+        """
+        try:
+            return self._rows(self._search(batch, code, headers),
+                              allowed=set(batch))
+        except TruncatedRead:
+            if len(batch) <= 1:
+                raise
+            mid = len(batch) // 2
+            out: list[dict[str, Any]] = []
+            for half in (batch[:mid], batch[mid:]):
+                out.extend(self._read_batch(half, code, headers))
+            return out
 
     def _search(self, patient_guids: list[str], code: str | None,
                 headers: dict[str, str]) -> dict[str, Any]:
@@ -260,7 +308,7 @@ class NodeReader:
             # page size, so a full page is indistinguishable from a complete
             # answer. Refusing is the only honest option: a figure computed
             # over an unknown fraction of a cohort reads as a real figure.
-            raise ReadError(
+            raise TruncatedRead(
                 f"this read filled cdr's maximum page ({MAX_COUNT} rows) and "
                 f"the endpoint has no way to fetch the rest — narrow the "
                 f"concepts or batch the cohort rather than reporting over a "

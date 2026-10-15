@@ -330,3 +330,5 @@
 ## 2026-10-15 — #826 batch the patient allowlist
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/node/reader.py
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_node.py
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/node/__init__.py
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_node_batch_splitting.py
