@@ -368,32 +368,61 @@ class TestTheReadEndpointActuallyExists:
                 purpose="statistics", patient_guids=["p1"])
         posted.assert_not_called()
 
-    def test_the_cohort_is_narrowed_SERVER_side_ONE_PATIENT_PER_REQUEST(self):
+    def test_the_cohort_is_narrowed_SERVER_side_AS_AN_ALLOWLIST(self):
         """The ordering argument depends on the narrowing happening at the
         CDR: the node excludes spärr-blocked patients BEFORE the read, so the
         CDR must never be asked for rows it would then have to hand back.
 
-        One patient per request, because a comma-separated list returns ZERO
-        rows on the deployed cdr1 and cdr2 (measured 2026-10-14) — cdr.pdhc's
-        tree accepts one, that code is deployed nowhere, and a client that
-        assumed it would read nothing at all."""
+        The allowlist form was ZERO-ROWS on every deployed CDR until #826
+        shipped `_requested_patients` to cdr1, cdr2, cdr3 and cdr_6. Each was
+        verified against production by reading the returned SUBJECTS back, not
+        by counting rows — a count cannot see this bug."""
         cap = _capture()
         with patch("app.node.reader.requests.get", side_effect=cap):
             self._reader().read_observations(
                 purpose="statistics", patient_guids=["p2", "p1", "p1"])
-        assert len(cap.calls) == 2, "deduplicated, one request each"
-        assert sorted(c["params"]["patient"] for c in cap.calls) == ["p1", "p2"]
-        assert not any("," in c["params"]["patient"] for c in cap.calls), (
-            "a comma-separated patient list reads nothing on the deployed "
-            "CDRs")
+        assert len(cap.calls) == 1, "one request, not one per patient"
+        # Deduplicated and sorted, so the request is deterministic.
+        assert cap.calls[0]["params"]["patient"] == "p1,p2"
 
     def test_every_patient_in_a_large_cohort_is_actually_asked_about(self):
-        guids = [f"p{i:05d}" for i in range(37)]
+        """Batching must not DROP anyone. The failure this guards is a cohort
+        quietly shorter than the one the spec named, which produces a figure
+        that looks entirely reasonable."""
+        from app.node.reader import PATIENTS_PER_REQUEST
+        guids = [f"p{i:05d}" for i in range(PATIENTS_PER_REQUEST * 2 + 37)]
         cap = _capture()
         with patch("app.node.reader.requests.get", side_effect=cap):
             self._reader().read_observations(
                 purpose="statistics", patient_guids=guids)
-        assert sorted(c["params"]["patient"] for c in cap.calls) == sorted(guids)
+        asked = [g for c in cap.calls for g in c["params"]["patient"].split(",")]
+        assert sorted(asked) == sorted(guids)
+        assert len(asked) == len(set(asked)), "no patient asked about twice"
+
+    def test_no_single_request_exceeds_the_measured_gunicorn_LIMIT(self):
+        """All four CDRs run gunicorn at the default `limit_request_line`
+        4094. Bisected against cdr1 on 2026-10-15: n=105 answers 200, n=110
+        answers 400 "Request Line is too large" — from gunicorn, with an HTML
+        body, before Flask sees the request.
+
+        So the CDRs' own `MAX_PATIENT_ALLOWLIST = 500` is unreachable and its
+        "batch a larger cohort" message is dead code (#831). This asserts the
+        REQUEST LINE, not the constant, because the constant is only a proxy
+        for the thing that actually breaks."""
+        from app.node.reader import PATIENTS_PER_REQUEST
+        guids = [f"{i:08d}-0000-4000-8000-{i:012d}" for i in range(500)]
+        cap = _capture()
+        with patch("app.node.reader.requests.get", side_effect=cap):
+            self._reader().read_observations(
+                purpose="statistics", patient_guids=guids)
+        assert cap.calls, "no request was made"
+        for c in cap.calls:
+            # url + "?" + urlencode(params); the patient list dominates.
+            line = len(c["url"]) + 1 + sum(
+                len(str(k)) + 1 + len(str(v)) + 1 for k, v in c["params"].items())
+            assert line < 4094, (
+                f"request line {line} bytes >= gunicorn's 4094 limit; "
+                f"PATIENTS_PER_REQUEST={PATIENTS_PER_REQUEST} is too large")
 
     def test_the_fan_out_is_BOUNDED(self):
         """An unbounded pool against a sibling is a denial of service with
@@ -431,10 +460,12 @@ class TestTheReadEndpointActuallyExists:
             self._reader().read_observations(
                 purpose="statistics", patient_guids=["p1", "p2"],
                 concepts=["a", "b"])
+        # One batch of patients per concept: the patients collapse into a
+        # single allowlist, the concepts do not, because cdr's `code` is
+        # single-valued (see the test above).
         assert sorted((c["params"]["patient"], c["params"]["code"])
                       for c in cap.calls) == [
-            ("p1", "urn:pdhc:concept|a"), ("p1", "urn:pdhc:concept|b"),
-            ("p2", "urn:pdhc:concept|a"), ("p2", "urn:pdhc:concept|b")]
+            ("p1,p2", "urn:pdhc:concept|a"), ("p1,p2", "urn:pdhc:concept|b")]
 
     def test_it_asks_for_cdrs_full_page_because_there_is_no_offset(self):
         from app.node.reader import MAX_COUNT

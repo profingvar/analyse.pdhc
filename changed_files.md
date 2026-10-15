@@ -326,3 +326,7 @@
 - analyse_app/tests/test_analysis_surface.py (#725 notes no longer rely on an undated fixture; + the positive trend test)
 - analyse_app/app/node/runner.py        (#806 run findings: the undated note carries no count; an empty result names the gate; excluded["consent"] -> ["not_returned"])
 - analyse_app/tests/test_node.py        (the withholding test follows the rename)
+
+## 2026-10-15 — #826 batch the patient allowlist
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/node/reader.py
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_node.py

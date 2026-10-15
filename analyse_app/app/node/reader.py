@@ -27,18 +27,30 @@ The bulk read a CDR actually serves is ``GET /api/v1/fhir/Observation``, and
 it already answers everything the node needs. Four details of it are load
 bearing, each measured rather than assumed:
 
-* **``patient`` is honoured and exact, but ONE GUID AT A TIME.** cdr.pdhc's
-  tree accepts a comma-separated allowlist (#701,
-  ``fhir_read._requested_patients``, 500 per request) and **that code is
-  deployed nowhere**: measured 2026-10-14 against cdr1 and cdr2,
-  ``patient=<a>,<b>`` returns ZERO rows on both, because the deployed
-  version matches the whole comma string as one guid (#826). A single guid
-  returns only that patient's rows on both, verified by reading the subjects
-  back rather than counting. So this client fans out one request per patient —
-  the same shape ``excluded_by_spärr`` uses for the same reason. Narrowing
-  server-side is not an optimisation here: the node excludes spärr-blocked
-  patients BEFORE it reads, and that ordering is the security argument, so
-  the CDR must never be asked for rows it would then hand back.
+* **``patient`` is honoured and exact, and takes an ALLOWLIST — since
+  2026-10-15.** It did not. #701's ``fhir_read._requested_patients`` was in
+  cdr.pdhc's tree and deployed nowhere: measured 2026-10-14,
+  ``patient=<a>,<b>`` returned ZERO rows on cdr1 and cdr2, because the
+  deployed version matched the whole comma string as one guid. 200 with an
+  empty Bundle — and an empty answer from a federation member is
+  indistinguishable from "this CDR holds none of your cohort", which is why
+  the first #823 fix read nothing from every production CDR and looked
+  plausible doing it.
+
+  #826 deployed the allowlist to **all four endpoints this client can reach**
+  — cdr1, cdr2, cdr3 and cdr_6 — each verified by reading the returned
+  SUBJECTS back. cdr_6 needed its own patch: it is a different codebase, and
+  patching three while leaving it single-valued would have put the defect on
+  exactly one member of the federation, which is worse than having it on all
+  three because the pooled figure would still look reasonable.
+
+  The batch size is 100, not the 500 the CDRs advertise, and that is a
+  gunicorn limit rather than a choice — see ``PATIENTS_PER_REQUEST`` below.
+
+  Narrowing server-side is still not merely an optimisation: the node excludes
+  spärr-blocked patients BEFORE it reads, and that ordering is the security
+  argument, so the CDR must never be asked for rows it would then hand back.
+  The allowlist is what lets the node narrow without widening.
 * **``code`` is matched against the stored canonical, and the two spellings
   are not interchangeable.** ``code=<system>|<guid>`` becomes an indexed
   equality against ``urn:pdhc:concept/<guid>``; a bare ``code=<guid>``
@@ -84,16 +96,35 @@ import requests
 
 DEFAULT_TIMEOUT = 30.0
 
-#: How many patients this client asks about at once. ONE, because the
-#: deployed CDRs honour a single `patient` guid and return zero rows for a
-#: comma-separated list — see the module docstring, and #826, which is the
-#: deployment gap itself. When `_requested_patients` is actually deployed
-#: this becomes a batch size and the fan-out collapses into one request per
-#: 500 patients; until then a larger value reads nothing, silently. Do not
-#: raise it on the evidence of cdr.pdhc's source — that is the mistake #826
-#: documents. Verify by reading the returned SUBJECTS back, never by
-#: counting rows.
-PATIENTS_PER_REQUEST = 1
+#: How many patients this client asks about at once.
+#:
+#: Was ONE until 2026-10-15, because the deployed CDRs honoured a single
+#: `patient` guid and returned ZERO ROWS for a comma-separated list. #826
+#: deployed `_requested_patients` to cdr1, cdr2, cdr3 AND cdr_6 — all four
+#: endpoints analyse can reach — and each was verified by reading the
+#: returned SUBJECTS back, never by counting rows. (A count cannot see this
+#: bug: with `_count` at the cap an honoured filter and a silently ignored
+#: one return the same number.)
+#:
+#: ONE HUNDRED, not the 500 the CDRs advertise, and the difference is
+#: measured rather than cautious. All four CDRs run gunicorn with the
+#: default `limit_request_line = 4094`, and a guid plus its separator is 37
+#: bytes. Bisected against cdr1 on 2026-10-15:
+#:
+#:     n=105  -> 200
+#:     n=110  -> 400  "Request Line is too large"   (gunicorn, HTML body)
+#:
+#: So the CDRs' own `MAX_PATIENT_ALLOWLIST = 500` is unreachable and its
+#: "batch a larger cohort" message is dead code — gunicorn refuses the
+#: request before Flask sees it (#831). 100 guids is ~3.8 KB, which also
+#: fits nginx's default 8 KB header buffer: #830 will repoint these reads
+#: from `host.docker.internal` to the public subdomains, and that puts the
+#: reverse proxy's limit in the path too.
+#:
+#: Raising this is a measurement, not a judgement. Bisect against a real
+#: CDR and read the subjects back; do not raise it on the evidence of
+#: cdr.pdhc's source, which is the mistake #826 documents.
+PATIENTS_PER_REQUEST = 100
 
 #: Concurrent reads against one CDR. Bounded, because an unbounded pool
 #: against a sibling is a denial of service with extra steps.
