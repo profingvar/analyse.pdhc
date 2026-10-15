@@ -2166,3 +2166,82 @@ confirms `3 endpoint(s)`.
 **#712 is now blocked only on data.** The ApiKey is in place and the policy
 field it waited for should not be filled in at all; but all four CDRs measured 0
 observations during #780, so a node topology would compute over nothing.
+
+---
+
+## G6 / #806 — the federated stack, run against two REAL CDRs (2026-10-14)
+
+The blocker #806 recorded was DATA. That is now cleared (cdr2 19,490 / cdr3
+19,509 observations for ips-known patients, seeded 2026-10-13), and running the
+stack found that the blocker was never only data: `NodeReader` was calling an
+endpoint no CDR serves (#823) and the pipeline's coarsen step was documented
+and absent (#824). Both are fixed; the run below is what proved it.
+
+Repeatable: `deploy/verify_federation.py` and `deploy/verify_gates.py`. Both
+run inside `analyse_pdhc_app` (that is where the keys are) and both are
+read-only.
+
+### What ran
+
+Two sources, `cdr2` and `cdr3`, each with a real `NodePolicy`, a real
+`NodeReader` over HTTP, the real spärr call to live ips, the real consent join
+inside each CDR, real projection + coarsening + disclosure, merged by the real
+coordinator. 8 patients per source, `describe` + `completeness`.
+
+    cdr2   n_patients=8   excluded={}   partials=[describe, completeness]
+    cdr3   n_patients=8   excluded={}   partials=[describe, completeness]
+    merged n=16  mean=0.7949362895286889
+    pooled n=16  mean=0.794936            <- computed with NO node at all
+
+The merged figure equals the figure the same rows produce pooled, which is
+#806's central "done when".
+
+### The gates, shown BITING rather than merely absent
+
+A gate that excludes nobody is indistinguishable from a gate that is not wired
+up — the #729 failure that hid for five months. So each of these changes one
+input:
+
+| probe | result |
+|---|---|
+| baseline, `statistics` | 8 of 8 read |
+| `research`, no project guids | cdr **400s**: "X-Access-Purpose: research requires X-Research-Project-Guids" |
+| `research`, a project the patients have not consented to | `excluded={'not_returned': 8}`, zero patients, nothing computed |
+| ips unreachable | `ConsentUnavailable` — fails CLOSED |
+| policy with no `source_clinic_id` | `ConsentUnavailable` — refuses rather than computing over unknown block status |
+| purpose outside `permitted_purposes` | `PolicyError: node 'cdr2' does not permit purpose 'research'` |
+| ips asked directly for three real patients | `200 False` each — it answered, rather than being failed-closed over |
+
+### What is still NOT done, and why #806 stays open
+
+The coordinator↔node **HTTP hop** is substituted: `run_spec` is called in
+process. #806's own body records that transport as working and not the
+blocker, and standing up node processes behind `ANALYSE_NODES` is **#807** —
+which needs `.env` work only the operator can do:
+
+- `ANALYSE_TRANSPORT_SECRET` (≥32 bytes, no default — an unset secret refuses
+  to talk rather than signing with a development constant)
+- the per-project key, THE SAME on every node in a project. A pseudonym
+  computed under a different key is a different patient to the merge, and the
+  failure is silent: the counts simply come out too high.
+- `ANALYSE_NODES` on the coordinator, `ANALYSE_NODE_POLICY` +
+  `ANALYSE_NODE_COHORT` per node
+- a service key per CDR (already present for `analyse.pdhc`)
+
+Ports 9112–9115 are inside analyse's own block, so Rule 16 is satisfied by
+three node processes there; nothing outside this service needs to move.
+
+Also still outstanding, and deliberately not faked: a **registered** spärr
+being honoured. Every refusal above is demonstrated by changing an input, not
+by writing a block into production ips. That write is the operator's call.
+
+### Two caveats worth carrying forward
+
+- `source_clinic_id` is taken as ONE value, from the first observation's
+  performer. Correct for the currently seeded CDRs, where every row shares one
+  performer org, and wrong in general — see the #712 note above, and **#782**.
+- `completeness` reports `rows_by_author_org: {"(not recorded)": 16}`. cdr
+  #665's attested `author_org_guid` lives on `clinical_context` and is not in
+  the Observation resource, so the FHIR search cannot carry it; the reader maps
+  the DECLARED `performer` instead, and the projection allowlist drops even
+  that unless a spec variable names `meta.author_org`.
