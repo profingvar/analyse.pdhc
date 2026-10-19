@@ -2411,3 +2411,70 @@ not declared green on the half that happens to be demonstrable.
 Not closing #806 and not recreating it: its body is wrong only in its headline,
 the chain #806 <-> #807 references itself by number, and the board has no edit —
 a delete-and-recreate would dangle both. This entry is the record.
+
+## #806 / #807 — the federated stack runs against real CDRs (2026-10-19)
+
+Two nodes deployed (9113 cdr2, 9114 cdr3), one image, role by configuration
+per ADR-0005. A `spec-run` fans out to both and merges:
+
+```
+cdr2 ok n_patients=30 / cdr3 ok n_patients=30 / POOLED 60  (k_min_applied=5)
+```
+
+**60 was predicted before deployment** from the two cohort digests (30 + 30,
+zero overlap). That is what makes it evidence rather than a green light: a
+mismatched project key inflates the count above the union, silently.
+
+### #806's acceptance, clause by clause
+
+| clause | evidence |
+|---|---|
+| fans out to >1 real CDR-backed node | cdr2 and cdr3, both `ok=True` |
+| merged result matches pooled | 60 = 30 + 30, as predicted |
+| an unavailable source is not absorbed silently | pooled fell to 30 and the report said "1 of 2 sources did not answer" |
+| **a patient excluded at one node can be SHOWN excluded** | see below |
+
+The last clause, demonstrated on patient `019b9f94-d180-4e47-9f83-2de22dfb620b`
+by flipping one boolean (`patient_index.ehds_opt_out`) and reverting:
+
+```
+baseline   pooled=60 cdr2=30 cdr3=30   ips: allowed=[019b9f94...] excluded=[]
+opted out  ips: excluded=[{patient_guid: 019b9f94..., reason: 'ehds_opt_out'}]
+re-run     pooled=59 cdr2=29 cdr3=30
+reverted   pooled=60 cdr2=30 cdr3=30
+```
+
+Named patient, named reason, and **the drop is at cdr2 only** — so this shows
+per-node enforcement, not a global filter. `statistics` is in
+`EHDS_SECONDARY_PURPOSES`, which is why `ehds_opt_out` is the flag that bites.
+The write was one row, one boolean, with the revert in a `trap` so it ran
+regardless of outcome.
+
+### Two gates still NOT demonstrated, recorded rather than claimed
+
+- **Org-based spärr exclusion.** All 60 patients are assigned to UAS
+  (`02b83b6b-2e31-4613-b80c-fc26ed984723`), so the organisation dimension
+  cannot be exercised — the same single-org population that holds #818. Both
+  nodes also carry UAS as their `source_clinic_id`, so the two-organisation
+  trust boundary ADR-0005 models is not tested either: these are two stores of
+  one organisation.
+- **Fail-closed on an unreachable ips.** Attempted with a throwaway node
+  pointed at a dead `IPS_BASE_URL`; the container failed to start because no
+  `DATABASE_URL` was passed, so it demonstrated unreachability handling rather
+  than fail-closed reading. Worth redoing.
+
+What *was* observed, unplanned and more convincing than the test I intended:
+with `source_clinic_id` absent from a node policy, the node refused with
+"every patient is treated as blocked" and contributed zero rows. The spärr
+gate fails closed on missing configuration.
+
+### Deferred
+
+Nodes for cdr1 (3 patients, gateway-fed) and cdr_6 (0 rows) are not deployed;
+ports 9112 and 9115 stay reserved for them. #806's own rule: do not stand nodes
+over empty databases to make this go green.
+
+Six corrections the plan needed are in
+`docs/analyse/807_node_topology_plan.md` §9 — the Colima bind-mount trap, the
+required `source_clinic_id`, the per-project key naming, mandatory `--project`,
+the bare-guid spec form, and per-process policy caching.
