@@ -2329,3 +2329,85 @@ existing tests that pinned the one-per-request shape now pin the batching —
 including that batching drops nobody and asks about nobody twice, because a
 cohort quietly shorter than the spec named produces a figure that looks
 entirely reasonable.
+
+## #806 — the DATA blocker has cleared (measured 2026-10-19)
+
+#806's body says "BLOCKED ON DATA, not transport" and lists, measured
+2026-10-09:
+
+```
+cdr1   health_observations   0 rows
+cdr2   observation_history   0 rows
+cdr3   observation_history   0 rows
+cdr_6  cdr_6_observations    1,285,296 rows / 11,336 patients
+```
+
+**That is no longer the state.** Re-measured read-only on 2026-10-19:
+
+| CDR | `observation` | distinct patients | ips-known | clinic-assigned |
+|---|---|---|---|---|
+| cdr1 | 1,942 | 3 | — | — |
+| cdr2 | **19,490** | **30** | **30 / 30** | **30 / 30** |
+| cdr3 | **19,509** | **30** | 30 | 30 |
+| cdr_6 | 0 | 0 | — | — |
+
+The data landed **2026-10-13**, four days after #806 was filed, with
+`ingest_raw.source_service = sim.pdhc`. So the ticket's measurement was correct
+when written and the blocker cleared afterwards — and by exactly the route
+#806 itself recommended as cheapest: point sim at the ips cohort and split the
+output across two CDRs.
+
+Three things make this a real unblocking rather than a technicality:
+
+- **All 30 are known to ips** — 30/30 match `patient_index.guid`, and 30/30
+  have a `patient_clinic_assignments` row. That was the explicit requirement
+  ("for patients ips knows about"); cdr_6's 11,336 orphans failing it is what
+  made the gates undemonstrable before.
+- **cdr2's and cdr3's cohorts are DIFFERENT.** A fan-out across two nodes
+  holding distinct patients exercises the merge; identical cohorts would only
+  have tested deduplication.
+- **analyse can already read both**, verified read-only: `GET
+  /api/v1/fhir/Observation?_count=1` returns 200 with an entry from each, using
+  its 64-char service key, and `READ_ONLY_SERVICE_SOURCES` is present on both
+  CDRs so the grant is narrowed (#760).
+
+### A note on #806's evidence, not its conclusion
+
+It measured `observation_history`, which is **0 on every CDR today despite the
+data**, because history fills on UPDATE and every row here is a first write
+(`version_id > 1` count is 0). So that column could not have distinguished "no
+data" from "data, never updated". The conclusion was right — `observation` was
+genuinely empty on 2026-10-09 — but the evidence chosen could not have shown
+it. Measure the live table.
+
+### Prerequisite checklist, as #806 states it
+
+| # | prerequisite | state |
+|---|---|---|
+| 1 | data in >=2 CDRs for ips-known patients | **CLEARED** |
+| 2 | a node per source | **NOT DONE — #807** |
+| 3 | plan.pdhc reachable | OK (200 from analyse) |
+| 4 | ips.pdhc reachable | OK (200 from analyse) |
+| 5 | a registered service key per CDR | OK (reads 200; all 13 sso pairs verified by digest, #832) |
+| 6 | one shared `ANALYSE_TRANSPORT_SECRET` | **UNSET** |
+| 7 | the same project key on every node | **UNSET** |
+
+Four of seven satisfied. **#806 is now blocked only on #807**, and #807's
+remainder is operator work: `ANALYSE_NODES`, `ANALYSE_NODE_POLICY`,
+`ANALYSE_NODE_COHORT`, `ANALYSE_TRANSPORT_SECRET` (>=32 bytes, no default) and
+`ANALYSE_PROJECT_KEY` are all unset. `ANALYSE_ROLE=coordinator` is set.
+
+### One caveat for #806's "done when"
+
+Its acceptance requires the consent and spärr gates **observably** applied —
+"a patient excluded at one node can be shown to be excluded, not merely
+absent". All 30 patients sit in **one** organisation (`count(distinct
+clinic_guid) = 1`), which is the same single-org population that holds #818.
+Org-based exclusion therefore cannot be demonstrated on this cohort;
+per-patient consent exclusion still can. Worth deciding which gate the
+acceptance run will actually show before standing the nodes up, so the run is
+not declared green on the half that happens to be demonstrable.
+
+Not closing #806 and not recreating it: its body is wrong only in its headline,
+the chain #806 <-> #807 references itself by number, and the board has no edit —
+a delete-and-recreate would dangle both. This entry is the record.
