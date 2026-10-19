@@ -253,3 +253,100 @@ no migration runs. Back up `shared/.env` first, as
 The only irreversible step is **rotating `ANALYSE_PROJECT_KEY`** once pseudonyms
 exist under it: every stored pseudonym becomes a different patient. Treat the
 first installed value as permanent for the project's life.
+
+---
+
+## 9. EXECUTED 2026-10-19 — and six corrections this plan needed
+
+Two nodes deployed (9113 cdr2, 9114 cdr3) and a federated run completed:
+
+```
+cdr2   ok=True  n_patients=30
+cdr3   ok=True  n_patients=30
+POOLED n_patients=60  n_rows=60   k_min_applied=5
+node_versions={'cdr2':'0.2.0-reform','cdr3':'0.2.0-reform'}
+```
+
+**60 is the number predicted in §6.3** from the two cohort digests before
+anything was deployed, and it is the proof the project key is right: a mismatch
+inflates the count above the union, silently.
+
+Six things this plan got wrong or left unresolved. Each cost a failed run, and
+each failed in a way worth recording.
+
+**1. `/usr/local/www` is NOT mounted into the Colima VM.** §4 put the policy
+files in `shared/`, per §7's rule that service config belongs there. A docker
+bind mount from `/usr/local/www/...` resolves to a path the VM has never heard
+of, and **the VM silently creates an empty directory rather than refusing**.
+`colima ssh -- mount` shows exactly one host mount: `/Users/miserver`
+(virtiofs). Containers started perfectly and failed at request time with
+`FileNotFoundError: /app/shared/node_policy_cdr2.yaml`. That is also why no
+other service on this platform uses a bind mount. Policies now live in
+`/Users/miserver/analyse_node_config/`, mounted read-only; a README in
+`shared/` points there.
+
+**2. `source_clinic_id` is REQUIRED in practice, not optional.** §4 omitted it,
+reasoning that a single-org cohort made it decorative. The node refused:
+
+> this node's policy has no source_clinic_id, so ips cannot be asked whether
+> this source is blocked. Set it in the node's policy file; until then every
+> patient is treated as blocked
+
+It is the value ips is *asked about*, so without it the spärr gate blocks
+everyone and the node reads nothing. **It fails closed, which is correct — and
+it is the clearest demonstration of the gate actually being applied that this
+exercise produced.** Both policies now carry UAS,
+`02b83b6b-2e31-4613-b80c-fc26ed984723`, the clinic all 60 patients are
+assigned to.
+
+**3. The pseudonym key is PER PROJECT.** `ProjectKey.from_env` builds the name
+as `ANALYSE_PROJECT_KEY_{project_id.upper().replace('-','_')}` and has **no
+fallback** to a generic `ANALYSE_PROJECT_KEY`. Both this plan and #807's body
+say "the same project key on every node", implying one variable. The generic
+`ANALYSE_PROJECT_KEY` installed in step 5.1 is therefore **unused** and should
+be removed once nothing else reads it. The real variable for this run is
+`ANALYSE_PROJECT_KEY_807_ACCEPTANCE`.
+
+**4. `--project` is mandatory on `spec-run`**, by design: *"the pseudonym key
+is per project and has no safe default. Two runs under different projects
+deliberately cannot be joined."* Good refusal; the plan did not mention it.
+
+**5. A spec names the BARE concept guid, not the stored canonical.**
+`reader._concept_of` returns the bare guid — "not the canonical URI it is
+stored under". A spec using `urn:pdhc:concept/<guid>` matches nothing and
+reports *"No patient at this source meets the cohort criteria"*, which reads
+like an empty cohort rather than a wrong spelling. `reader.py:50-64` documents
+the same asymmetry on the CDR query side and records that it "cost a wrong
+conclusion during #823".
+
+**6. `NodeContext` is cached per worker process.** With the mount live, editing
+a policy file is not enough — cdr2 kept answering with the pre-edit policy
+while cdr3 picked up the new one, so one source reported the old refusal and
+the other succeeded. Restart the node after any policy change.
+
+One improvement over the plan: `ANALYSE_NODES` uses **service names**
+(`http://node_cdr2:9110`), not the loopback form §5.4 proposed. The nodes share
+the compose project and therefore the docker network, so the traffic never
+leaves the host, nothing depends on `host.docker.internal`, and §7 gains no new
+loopback exception.
+
+### What is verified, and what is not
+
+| #806 acceptance clause | state |
+|---|---|
+| fans out to more than one real CDR-backed node | **yes** — cdr2 and cdr3, both `ok` |
+| merged result matches what the same data produces pooled | **yes** — 60 = 30 + 30, zero overlap, as predicted |
+| an unavailable source is not silently absorbed | **yes** — pooled fell to 30 and the report said "1 of 2 sources did not answer" |
+| spärr gate observably applied | **partly** — observed failing closed on a missing `source_clinic_id`, every patient blocked |
+| **a patient excluded at one node can be shown to be excluded** | **NOT DONE** — needs a consent revocation for one named patient in ips, which is a production write |
+
+A fail-closed-on-ips test was attempted with a throwaway node pointed at a dead
+`IPS_BASE_URL`; the container failed to start (no `DATABASE_URL` passed), so
+what it actually demonstrated was unreachability handling, not fail-closed
+reading. Worth redoing properly.
+
+### Still true from §7
+
+Nodes for cdr1 and cdr_6 remain deferred, ports 9112 and 9115 reserved. Both
+nodes are UAS, so the two-organisation trust boundary ADR-0005 models is not
+exercised by this topology — they are two stores of one organisation.
