@@ -333,3 +333,7 @@
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/node/__init__.py
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_node_batch_splitting.py
 /Users/martiningvar/T7_sidewinder/analyse.pdhc/.env.example  (#830: created; the file did not exist, Rule 23)
+
+## #807 — node topology deployment plan (2026-10-19)
+
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/analyse/807_node_topology_plan.md (new)
