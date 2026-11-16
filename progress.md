@@ -2481,3 +2481,5 @@ the bare-guid spec form, and per-process policy caching.
 
 ## #931 — analyse reads plan with a key (2026-11-16)
 concept_display sends analyse's read_only plan key, read from the environment because fill_displays runs on a thread pool. pytest: 656 passed.
+
+## #942 (2026-11-16): the canonical URI format is owned by termbank.pdhc (app/canonical_uri.py + conformance/canonical_uri_cases.json); the concept URN by plan.pdhc (planp/app/concept_urn.py + conformance/concept_urn_cases.json). Consumers keep byte-identical corpus copies in their tests; tools/check_canonical_uri_conformance.py in the workspace fails on drift or on a literal that breaks the grammar.
