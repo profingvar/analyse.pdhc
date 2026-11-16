@@ -27,6 +27,7 @@ extra steps, the same reasoning as `node/reader.py`'s spärr fan-out.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -66,6 +67,19 @@ def _store(guid: str, display: str | None) -> None:
         _cache[guid] = (time.monotonic(), display)
 
 
+def plan_read_headers() -> dict:
+    """#931 — analyse's read_only service key for plan.pdhc, or `{}` if unset.
+
+    Read from the ENVIRONMENT, not `current_app.config`: `fill_displays` runs
+    the lookups on a thread pool, where there is no app context.
+    """
+    key = (os.environ.get("PLAN_SERVICE_KEY") or "").strip()
+    if not key:
+        return {}
+    src = (os.environ.get("PLAN_SOURCE_SERVICE") or "").strip() or "analyse.pdhc"
+    return {"X-Source-Service": src, "X-Service-Key": key}
+
+
 def lookup_display(guid: str, base_url: str, *, timeout: float = DEFAULT_TIMEOUT,
                    ttl: float = DEFAULT_TTL) -> str | None:
     """One concept's display name, or None. Never raises."""
@@ -78,7 +92,7 @@ def lookup_display(guid: str, base_url: str, *, timeout: float = DEFAULT_TIMEOUT
         r = requests.get(
             f"{base_url.rstrip('/')}/api/v1/CodeSystem/$lookup",
             params={"system": PLAN_LOCAL_CS_URL, "code": guid},
-            timeout=timeout)
+            headers=plan_read_headers(), timeout=timeout)
     except requests.RequestException as e:
         # Transient — do NOT cache, so the next page retries. Caching a
         # reachability blip would blank the names for an hour.

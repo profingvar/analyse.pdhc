@@ -337,3 +337,7 @@
 ## #807 — node topology deployment plan (2026-10-19)
 
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/docs/analyse/807_node_topology_plan.md (new)
+
+## #931 — analyse reads plan.pdhc with its own service key (2026-11-16)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/analyse/concept_display.py — plan_read_headers() (from the environment: lookups run on a thread pool); lookup_display sends it
+- .env.example; /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_plan_read_key_931.py (NEW)

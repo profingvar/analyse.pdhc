@@ -2478,3 +2478,6 @@ Six corrections the plan needed are in
 `docs/analyse/807_node_topology_plan.md` §9 — the Colima bind-mount trap, the
 required `source_clinic_id`, the per-project key naming, mandatory `--project`,
 the bare-guid spec form, and per-process policy caching.
+
+## #931 — analyse reads plan with a key (2026-11-16)
+concept_display sends analyse's read_only plan key, read from the environment because fill_displays runs on a thread pool. pytest: 656 passed.
