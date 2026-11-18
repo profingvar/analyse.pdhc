@@ -2490,3 +2490,10 @@ Overlay deploy to analyse_pdhc-app, health 200, hashes match git. Live check (ad
 cdr2-only restricts the counts; min_measures=20 keeps 156 of 295.
 Rollback: image tag `:pre_preview`, files `*.pre_preview` in the release dir.
 Known, not fixed: histogram/boxplot/export do not filter by cohort members.
+
+## 2026-11-18 — Histogram, scatter, export scoped to cohort members (084e948), deployed
+All three now count only cohort members (boxplot/trend already did). Tests
+`tests/test_cohort_member_scoping.py` (3, fail on old code); two flow tests given
+real members. Suite 680 pass. Deployed researcher.py 690a87fe82be → 387eaefd98cd,
+health 200. Live: empty cohort → histogram n=0 (before: everyone readable).
+Rollback: image `:pre_members`, file `researcher.py.pre_members`.

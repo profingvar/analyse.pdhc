@@ -347,3 +347,8 @@
 - analyse_app/app/routes/researcher.py
 - analyse_app/app/templates/researcher_workspace.html
 - analyse_app/tests/test_cohort_preview.py
+
+## 2026-11-18 — member scoping (deployed)
+- analyse_app/app/routes/researcher.py
+- analyse_app/tests/test_cohort_member_scoping.py (new)
+- analyse_app/tests/test_researcher_flow.py
