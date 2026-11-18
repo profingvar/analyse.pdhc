@@ -43,6 +43,8 @@ from app.analyse.federation import (
     merge_histograms,
 )
 from app.analyse.aggregations import aggregate_per_cdr_results
+from app.analyse import measure_counts
+from app.analyse.concept_display import fill_displays as _fill_concept_displays
 from app.services.role_guards import researcher_required
 
 
@@ -428,6 +430,58 @@ def inventory():
 # POST /api/cohort  — define a cohort, return id + count
 # ---------------------------------------------------------------------------
 
+def _min_measures(body: dict) -> int:
+    try:
+        return max(0, int(body.get("min_measures") or 0))
+    except (TypeError, ValueError):
+        abort(400, description="min_measures must be a whole number")
+
+
+def _measure_counts(cdr_ids) -> tuple[dict, list[dict]]:
+    """Per-patient, per-concept measurement counts from the chosen CDRs (all
+    when none are chosen). See app.analyse.measure_counts."""
+    auth = _auth_headers()
+    resp = fanout(
+        _registry(),
+        method="GET",
+        path="api/v1/fhir/Observation",
+        cdr_ids=cdr_ids or None,
+        params={"_pdhc_counts": "patient,code",
+                "_count": str(measure_counts.ROW_PAGE)},
+        org_guids_header=auth["org_guids"],
+        is_admin_header=auth["is_admin"],
+        timeout=60,
+    )
+    return measure_counts.collect(resp.results)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/cohort/preview — who would be in it, and what is measured
+# ---------------------------------------------------------------------------
+
+@bp.post("/cohort/preview")
+@researcher_required
+@audit_read
+def preview_cohort():
+    """Resolve the cohort WITHOUT saving it and show, per candidate patient,
+    how many measurements of each concept the chosen CDRs hold.
+
+    `min_measures` (default 0 = include all) marks who a define would keep.
+    Nothing here is k-floored: it lists pseudonymous patient GUIDs, the same
+    level as the cohort's CSV export, to the same researcher_required caller."""
+    body = request.get_json(silent=True) or {}
+    filt = CohortFilter.from_dict(body)
+    min_measures = _min_measures(body)
+    members, summary = _resolve_members(filt)
+    counts, sources = _measure_counts(filt.cdr_ids)
+    out = measure_counts.summarise(members, counts, min_measures)
+    _fill_concept_displays(out["concepts"], current_app.config.get("PLAN_BASE_URL") or "")
+    out["sources"] = sources
+    out["consent"] = summary.get("consent")
+    out["sparr"] = summary.get("sparr")
+    return jsonify(out), 200
+
+
 @bp.post("/cohort")
 @researcher_required
 @audit_read
@@ -435,6 +489,15 @@ def define_cohort():
     body = request.get_json(silent=True) or {}
     filt = CohortFilter.from_dict(body)
     members, summary = _resolve_members(filt)
+    # Minimum measures per patient, counted in the chosen CDRs (2026-11-18).
+    # 0, the default, keeps everyone and asks no CDR anything.
+    min_measures = _min_measures(body)
+    if min_measures > 0:
+        counts, sources = _measure_counts(filt.cdr_ids)
+        before = len(members)
+        members = measure_counts.keep(members, counts, min_measures)
+        summary["min_measures"] = {"min": min_measures, "before": before,
+                                   "after": len(members), "sources": sources}
     members_list = list(members)
     row = Cohort(
         guid=str(uuid.uuid4()),

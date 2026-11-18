@@ -41,6 +41,15 @@
   details > summary { cursor:pointer; font-size:.9rem; color:var(--primary); }
   .note { font-size:.82rem; color:var(--muted); border-left:3px solid var(--border);
           padding-left:.6rem; margin:.6rem 0 0; }
+  .srcs { display:flex; flex-wrap:wrap; gap:.4rem 1.2rem; margin:.3rem 0 .6rem; }
+  .srcs label { font-size:.9rem; display:flex; align-items:center; gap:.35rem; }
+  .slider { display:flex; align-items:center; gap:.8rem; flex-wrap:wrap; margin:.6rem 0; }
+  .slider input[type=range] { flex:1 1 14rem; min-width:10rem; }
+  .slider output { font-variant-numeric:tabular-nums; min-width:12rem; }
+  .scroll { overflow-x:auto; max-height:28rem; overflow-y:auto; border:1px solid #eee; border-radius:4px; }
+  .scroll table th { position:sticky; top:0; background:#fff; }
+  code.g { font-size:.8rem; }
+  tr.out td { color:#aab0b8; }
   [hidden] { display:none !important; }
 </style>
 </head>
@@ -81,6 +90,13 @@
   </div>
 
   <div class="card">
+    <h2>Sources</h2>
+    <p class="status">Which CDRs the cohort draws its measurements from. All are
+      used by default.</p>
+    <div class="srcs" id="srcs"><span class="status">loading…</span></div>
+  </div>
+
+  <div class="card">
     <h2>Cohort predicate</h2>
     <p class="status">Accepted keys: <code>cdr_ids</code>,
       <code>demographics</code> (<code>age_min</code>, <code>age_max</code>,
@@ -92,12 +108,32 @@
   "demographics": { "age_min": 40, "age_max": 70 },
   "conditions": []
 }</textarea>
-    <p><button id="define">Define cohort</button>
+    <div class="slider">
+      <label for="minm">Minimum measures per patient</label>
+      <input type="range" id="minm" min="0" max="0" value="0" step="1">
+      <output id="minm-out">0 — include all</output>
+    </div>
+    <p><button id="preview" class="ghost" type="button">Preview cohort</button>
+       <button id="define">Define cohort</button>
        <button id="reset" class="ghost" type="button">Reset</button>
        <span id="status" class="status"></span></p>
     <p class="note">Defining a cohort resolves it across the sources and applies
       the research-consent filter. Counts below <b>k</b> are suppressed when the
       cohort is analysed, not here.</p>
+  </div>
+
+  <div id="pv" class="card" hidden>
+    <h2>Preview</h2>
+    <p id="pv-meta" class="status"></p>
+    <h3 style="font-size:.9rem;margin:.6rem 0 .3rem">Measures per concept</h3>
+    <div class="scroll"><table id="pv-concepts">
+      <thead><tr><th>Concept</th><th class="num">Measures</th><th class="num">Patients</th></tr></thead>
+      <tbody></tbody></table></div>
+    <h3 style="font-size:.9rem;margin:.9rem 0 .3rem">Patients</h3>
+    <div class="scroll"><table id="pv-patients"><thead></thead><tbody></tbody></table></div>
+    <p class="note">Greyed rows fall below the minimum and would not be in the
+      cohort. Patient GUIDs are pseudonymous, the same level as the cohort's CSV
+      export. Nothing is saved until you define the cohort.</p>
   </div>
 
   <div id="pane" class="card" hidden>
@@ -158,6 +194,7 @@ async function loadInventory() {
     return;
   }
   const b = r.body;
+  renderSources(b.cdrs || []);
   tb.innerHTML = "";
   for (const c of b.cdrs || []) {
     const tr = document.createElement("tr");
@@ -199,6 +236,113 @@ async function loadInventory() {
       + `now will be incomplete.`;
 }
 
+const esc = (t) => String(t ?? "").replace(/[&<>"']/g,
+  (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function renderSources(cdrs) {
+  const wrap = $("srcs");
+  wrap.innerHTML = "";
+  for (const c of cdrs) {
+    const l = document.createElement("label");
+    l.innerHTML = `<input type="checkbox" value="${esc(c.cdr_id)}" checked> `
+      + `${esc(c.cdr_id)} <span class="status">${fmt(c.patients)} pts</span>`;
+    wrap.appendChild(l);
+  }
+  if (!cdrs.length) wrap.innerHTML = "<span class='status'>no sources configured</span>";
+}
+
+// Every box ticked = every source = [] (the predicate's own convention).
+function chosenCdrs() {
+  const boxes = [...$("srcs").querySelectorAll("input[type=checkbox]")];
+  const on = boxes.filter(b => b.checked).map(b => b.value);
+  return on.length === boxes.length ? [] : on;
+}
+
+function buildFilter() {
+  let filter;
+  try { filter = JSON.parse($("filter").value); }
+  catch (e) { $("status").textContent = "invalid JSON: " + e.message; return null; }
+  const boxes = $("srcs").querySelectorAll("input[type=checkbox]");
+  if (boxes.length && ![...boxes].some(b => b.checked)) {
+    $("status").textContent = "choose at least one source"; return null;
+  }
+  filter.cdr_ids = chosenCdrs();
+  filter.min_measures = Number($("minm").value) || 0;
+  $("filter").value = JSON.stringify(
+    Object.fromEntries(Object.entries(filter).filter(([k]) => k !== "min_measures")), null, 2);
+  return filter;
+}
+
+let PREVIEW = null;
+
+function minLabel(v) { return v === 0 ? "0 — include all" : `${v} or more`; }
+
+function renderPreview() {
+  if (!PREVIEW) return;
+  const min = Number($("minm").value) || 0;
+  $("minm-out").textContent = minLabel(min);
+  const rows = PREVIEW.patients.map(p => Object.assign({}, p, {kept: min === 0 || p.total >= min}));
+  const kept = rows.filter(p => p.kept);
+  const byConcept = {};
+  for (const p of kept) for (const [k, n] of Object.entries(p.by_concept)) {
+    const c = byConcept[k] || (byConcept[k] = {measures: 0, patients: 0});
+    c.measures += n; c.patients += 1;
+  }
+  const failed = (PREVIEW.sources || []).filter(s => !s.ok).map(s => s.cdr_id);
+  const trunc = (PREVIEW.sources || []).filter(s => s.truncated).map(s => s.cdr_id);
+  $("pv-meta").textContent = `${kept.length} of ${PREVIEW.n_candidates} candidate patient(s) kept`
+    + (PREVIEW.patients_truncated ? " · list shows the first " + PREVIEW.patients.length : "")
+    + (failed.length ? " · NOT answered: " + failed.join(", ") : "")
+    + (trunc.length ? " · count may be incomplete for: " + trunc.join(", ") : "");
+
+  const concepts = PREVIEW.concepts.map(c => Object.assign({}, c, byConcept[c.canonical] || {measures: 0, patients: 0}))
+    .sort((a, b) => b.measures - a.measures);
+  const ct = $("pv-concepts").querySelector("tbody");
+  ct.innerHTML = concepts.length ? "" : "<tr><td colspan='3' class='status'>no measures in the chosen sources</td></tr>";
+  for (const c of concepts) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td title="${esc(c.canonical)}">${esc(c.display || c.canonical)}</td>`
+      + `<td class="num">${fmt(c.measures)}</td><td class="num">${fmt(c.patients)}</td>`;
+    ct.appendChild(tr);
+  }
+
+  const cols = concepts.slice(0, 8);
+  $("pv-patients").querySelector("thead").innerHTML = "<tr><th>Patient</th><th class='num'>Total</th>"
+    + cols.map(c => `<th class="num" title="${esc(c.canonical)}">${esc(c.display || c.canonical)}</th>`).join("") + "</tr>";
+  const pt = $("pv-patients").querySelector("tbody");
+  pt.innerHTML = "";
+  for (const p of rows) {
+    const tr = document.createElement("tr");
+    if (!p.kept) tr.className = "out";
+    tr.innerHTML = `<td><code class="g" title="${esc(p.patient_guid)}">${esc(p.patient_guid)}</code></td>`
+      + `<td class="num">${fmt(p.total)}</td>`
+      + cols.map(c => `<td class="num">${fmt(p.by_concept[c.canonical] || 0)}</td>`).join("");
+    pt.appendChild(tr);
+  }
+  if (!rows.length) pt.innerHTML = "<tr><td class='status'>no candidate patients</td></tr>";
+}
+
+async function preview() {
+  const filter = buildFilter();
+  if (!filter) return;
+  $("status").textContent = "previewing…";
+  const r = await jfetch("/api/cohort/preview", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify(filter),
+  });
+  if (!r) return;
+  if (r.status !== 200 || !r.body) {
+    $("status").textContent = "error " + r.status + (r.body && r.body.error ? ": " + r.body.error : "");
+    return;
+  }
+  PREVIEW = r.body;
+  $("minm").max = String(Math.max(0, PREVIEW.max_measures));
+  if (Number($("minm").value) > PREVIEW.max_measures) $("minm").value = "0";
+  $("status").textContent = "";
+  $("pv").hidden = false;
+  renderPreview();
+}
+
 function renderStarters() {
   const wrap = $("starters");
   wrap.innerHTML = "";
@@ -217,9 +361,8 @@ function renderStarters() {
 }
 
 async function define() {
-  let filter;
-  try { filter = JSON.parse($("filter").value); }
-  catch (e) { $("status").textContent = "invalid JSON: " + e.message; return; }
+  const filter = buildFilter();
+  if (!filter) return;
   $("status").textContent = "resolving…";
   const r = await jfetch("/api/cohort", {
     method: "POST", headers: { "content-type": "application/json" },
@@ -252,6 +395,11 @@ async function loadCohorts() {
 
 document.addEventListener("DOMContentLoaded", () => {
   $("define").addEventListener("click", define);
+  $("preview").addEventListener("click", preview);
+  $("minm").addEventListener("input", () => {
+    $("minm-out").textContent = minLabel(Number($("minm").value) || 0);
+    renderPreview();
+  });
   $("reset").addEventListener("click", () => {
     $("filter").value = JSON.stringify(DEFAULT_FILTER, null, 2);
     $("status").textContent = "";
