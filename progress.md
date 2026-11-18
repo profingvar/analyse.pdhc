@@ -2483,3 +2483,10 @@ the bare-guid spec form, and per-process policy caching.
 concept_display sends analyse's read_only plan key, read from the environment because fill_displays runs on a thread pool. pytest: 656 passed.
 
 ## #942 (2026-11-16): the canonical URI format is owned by termbank.pdhc (app/canonical_uri.py + conformance/canonical_uri_cases.json); the concept URN by plan.pdhc (planp/app/concept_urn.py + conformance/concept_urn_cases.json). Consumers keep byte-identical corpus copies in their tests; tools/check_canonical_uri_conformance.py in the workspace fails on drift or on a literal that breaks the grammar.
+
+## 2026-11-18 — Cohort preview, CDR picker, minimum-measures slider deployed (8f4f04b)
+Overlay deploy to analyse_pdhc-app, health 200, hashes match git. Live check (admin):
+295 candidates; cdr1/2/3 counted_by_cdr, cdr6 counted_from_rows, none truncated;
+cdr2-only restricts the counts; min_measures=20 keeps 156 of 295.
+Rollback: image tag `:pre_preview`, files `*.pre_preview` in the release dir.
+Known, not fixed: histogram/boxplot/export do not filter by cohort members.

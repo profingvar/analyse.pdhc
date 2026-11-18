@@ -341,3 +341,9 @@
 ## #931 — analyse reads plan.pdhc with its own service key (2026-11-16)
 - /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/analyse/concept_display.py — plan_read_headers() (from the environment: lookups run on a thread pool); lookup_display sends it
 - .env.example; /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_plan_read_key_931.py (NEW)
+
+## 2026-11-18 — cohort preview (deployed)
+- analyse_app/app/analyse/measure_counts.py (new)
+- analyse_app/app/routes/researcher.py
+- analyse_app/app/templates/researcher_workspace.html
+- analyse_app/tests/test_cohort_preview.py
