@@ -103,7 +103,9 @@ def test_list_cohorts(client):
     assert r.get_json()["n"] >= 1
 
 
-def test_cohort_histogram_merges_two_cdrs(client):
+def test_cohort_histogram_merges_two_cdrs(client, ips_patients):
+    # Every observed patient is a member: the histogram counts members only.
+    ips_patients({f"p{i}" for i in range(100)} | {f"q{i}" for i in range(80)})
     routes_define = [(lambda m, u, p, j: "/api/v1/fhir/Patient" in u,
                       {"entry": [{"resource": _mk_patient("p1")}]})]
     with patch("app.analyse.federation.requests.request",
@@ -157,8 +159,9 @@ def test_cohort_export_csv_has_expected_header(client):
         and "sim_run_id" in header
 
 
-def test_scatter_truncates_above_cap(client):
+def test_scatter_truncates_above_cap(client, ips_patients):
     members = [f"pat-{i}" for i in range(200)]
+    ips_patients(set(members))  # scatter pairs members only
     routes_define = [(lambda m, u, p, j: "/api/v1/fhir/Patient" in u,
                       {"entry": [{"resource": _mk_patient(g)} for g in members]})]
     with patch("app.analyse.federation.requests.request",

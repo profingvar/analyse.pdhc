@@ -560,6 +560,28 @@ def _owner_label() -> str:
     return getattr(blob, "user_guid", "") or getattr(blob, "email", "") or "anonymous"
 
 
+def _subject_guid(obs: dict) -> str:
+    ref = (obs.get("subject") or {}).get("reference", "")
+    return ref.rsplit("/", 1)[-1] if "/" in ref else ref
+
+
+def _only_members(results, members: set[str]):
+    """Per-CDR fanout results with each Bundle cut down to the cohort's
+    members (2026-11-18). A result that is not ok, or not a Bundle, passes
+    through unchanged so the merger still reports it."""
+    import dataclasses
+    out = []
+    for r in results or []:
+        body = getattr(r, "body", None)
+        if getattr(r, "ok", False) and isinstance(body, dict) \
+                and body.get("resourceType") == "Bundle":
+            kept = [e for e in body.get("entry") or []
+                    if _subject_guid(e.get("resource") or {}) in members]
+            r = dataclasses.replace(r, body={**body, "entry": kept, "total": len(kept)})
+        out.append(r)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Variable / histogram / boxplot / scatter / trend
 # ---------------------------------------------------------------------------
@@ -588,8 +610,11 @@ def cohort_histogram(cohort_id: str, canonical: str):
         org_guids_header=auth["org_guids"],
         is_admin_header=auth["is_admin"],
     )
+    # Only the cohort's members count (2026-11-18; before, every patient
+    # the caller could read was in the histogram).
     per_cdr_params = aggregate_per_cdr_results(
-        raw.results, kind="stats", buckets=buckets)
+        _only_members(raw.results, set(cohort["members"])),
+        kind="stats", buckets=buckets)
     merged = merge_histograms(per_cdr_params, buckets=buckets)
     return jsonify({
         "cohort_id": cohort_id,
@@ -798,14 +823,9 @@ def cohort_export(cohort_id: str):
             )
             rows = concat_series(resp.results)
             for r in rows:
-                ref = (r.get("subject") or {}).get("reference", "")
-                pat_guid = ref.rsplit("/", 1)[-1] if "/" in ref else ref
-                # `members` filter is intentionally lenient — see
-                # _paired_observations docstring. Today the CDR's
-                # Patient.id (uuid4) and obs.subject.reference (uuid5)
-                # are different namespaces; once that's reconciled,
-                # tighten back to ``if pat_guid not in members: continue``.
-                if not pat_guid:
+                pat_guid = _subject_guid(r)
+                # Members only (2026-11-18; see _paired_observations).
+                if not pat_guid or pat_guid not in members:
                     continue
                 org = _extract_org(r)
                 source_code = _extract_source_code(r)
@@ -920,15 +940,10 @@ def _paired_observations(cohort: dict, x_canonical: str, y_canonical: str,
     """Pull every (x, y) pair where the same Patient has both
     Observations. Uses each patient's latest x and latest y.
 
-    Membership filter is intentionally **lenient**: today's CDR
-    storage assigns a fresh uuid4 to every Patient row, while
-    observations reference the original sim-supplied uuid5 in
-    subject.reference, so a strict ``pat_guid in members`` filter
-    would always be empty. The cohort's ``cdr_ids`` filter is forwarded
-    to fanout, which is sufficient scoping for the demonstrator. When
-    the CDR's resource_writer is fixed to honor the supplied
-    ``Patient.id`` (Phase-5 follow-up), tighten this to match
-    ``members`` again.
+    Only the cohort's ``members`` count. (Until 2026-11-18 this was
+    lenient because Patient ids and subject references once lived in
+    different uuid namespaces; they now agree — the live cohort preview
+    matches members against subject references.)
     """
     auth = _auth_headers()
     cdr_filter = (cohort["filter"].get("cdr_ids") or [])
@@ -948,14 +963,12 @@ def _paired_observations(cohort: dict, x_canonical: str, y_canonical: str,
     x_rows = concat_series(x_resp.results)
     y_rows = concat_series(y_resp.results)
 
-    # Group by patient → latest value. No `members` filter — see
-    # docstring; relying on the cdr_ids-scoped federation query.
+    # Group by patient → latest value, members only.
     def _latest(rows):
         latest_by_pat: dict[str, dict] = {}
         for r in rows:
-            ref = (r.get("subject") or {}).get("reference", "")
-            pat_guid = ref.rsplit("/", 1)[-1] if "/" in ref else ref
-            if not pat_guid:
+            pat_guid = _subject_guid(r)
+            if not pat_guid or pat_guid not in members:
                 continue
             eff = r.get("effectiveDateTime") or ""
             cur = latest_by_pat.get(pat_guid)
