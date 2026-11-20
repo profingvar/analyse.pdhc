@@ -2,7 +2,7 @@
 
 ``JSONB`` is dialect-aware: real ``JSONB`` on Postgres (production), plain
 ``JSON`` on SQLite so the hermetic test suite can ``create_all()`` (same
-pattern as dashboard.pdhc/app/models and cd_assist_app).
+pattern as dashboard.pdhc/app/models).
 """
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy

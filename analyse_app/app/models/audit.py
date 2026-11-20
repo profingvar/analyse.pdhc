@@ -3,7 +3,7 @@
 PDL Ch 4 §3 kontroller log + Lag (2022:913) chain-of-custody. Ported from
 dashboard.pdhc's ``DashboardAudit`` column-for-column (only the table/model
 name changes) so downstream audit tooling (admin views, X1 tuple extraction)
-treats the two identically across the dashboard/cd-assist/analyse split.
+treats the two identically across the dashboard/analyse split.
 Written by the ``@audit_read`` decorator in ``services/audit.py``, and by
 the researcher CSV export receipt (route='research_export').
 

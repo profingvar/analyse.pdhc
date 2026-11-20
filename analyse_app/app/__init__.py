@@ -4,10 +4,10 @@ The extracted group half of the old dashboard (docs/470_scoping.md). It hosts
 the researcher/cohort engine and the gateway/monitor-facing federated
 endpoints (``/api/v1/observations`` #291; ``/api/v1/stats`` /
 ``/api/v1/canonical`` / ``/api/v1/openehr`` #292). Gated on the ANALYSIS phase
-(NOT care-delivery — that is cd-assist). Federates its reads across CDR2–6,
+(NOT care-delivery — that is dashboard). Federates its reads across CDR2–6,
 presenting ``ANALYSE_PDHC_SERVICE_KEY`` as its CDR read identity.
 
-The individual / point-of-care half (nurse + charts) lives in cd-assist.pdhc —
+The individual / point-of-care half (nurse + charts) lives in dashboard.pdhc —
 none of it is here.
 """
 import os

@@ -4,12 +4,12 @@ The **GROUP / population + federated-events** half of the old dashboard,
 extracted into its own containerised FHIR-R5 microservice (docs/470_scoping.md).
 Hosts the researcher/cohort engine and the gateway/monitor-facing federated
 endpoints. Gated on the **ANALYSIS phase** (NOT care-delivery — that half stays
-in dashboard, being renamed cd-assist).
+in dashboard).
 
 Tickets: **#538** (scaffold) + **#539** (port the group/population engine).
 Follow-ups (separate tickets, operator-handled): #540 gateway `ANALYSE_BASE_URL`
 repoint, #541 CDR2–6 read-identity flip, #542 cutover, #543 delete the group
-half from dashboard(cd-assist).
+half from dashboard.
 
 ## Identity / ports (CLAUDE.md §3)
 
@@ -52,7 +52,7 @@ half from dashboard(cd-assist).
 - **#541** flip CDR2–6 to accept `X-Source-Service: analyse.pdhc` +
   `ANALYSE_PDHC_SERVICE_KEY` for analyse reads.
 - **#543** delete the group half (researcher + federated endpoints) from
-  dashboard(cd-assist) once analyse is live.
+  dashboard once analyse is live.
 
 ## What is IN this service
 - `POST/GET /api/cohort`, `/api/cohort/<id>/{histogram,boxplot,scatter,trend,export}`
@@ -77,6 +77,6 @@ Who may call which of these lives in one place, `app/analyse/callers.py`
 identity (Playwright/perf/chaos, 2026-04-28), not a service; it had been
 allowlisted on the patient-data endpoints by copy-paste and #727 removed it.
 
-## What is NOT here (belongs to cd-assist)
+## What is NOT here (belongs to dashboard)
 Nurse single-patient views, `/charts`, CDR1 care-delivery reads, patient picker,
 saved designs, spärr per-patient lift. Do not add them here.

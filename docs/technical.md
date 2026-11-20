@@ -18,7 +18,7 @@ It hosts:
 
 It is gated on the **ANALYSIS phase**. The individual / point-of-care half
 (nurse, `/charts`, patient single-view, CDR1 care-delivery reads) lives in
-cd-assist (host `dashboard.pdhc.se`, unchanged) and is deliberately absent here.
+dashboard (host `dashboard.pdhc.se`) and is deliberately absent here.
 
 ## Architecture
 
@@ -102,7 +102,7 @@ returned token, admits only `has_analysis_access`, stores `session['sso_token']`
 
 ### Read core (app/analyse/federation.py + aggregations.py)
 Copied from dashboard.pdhc (source of truth per decision D5 — mirror any fix
-across dashboard/cd-assist/analyse). `CdrRegistry.from_config` reads
+across dashboard/analyse). `CdrRegistry.from_config` reads
 `CDR_ENDPOINTS`; `fanout` calls every CDR concurrently with per-CDR timeout and
 partial-result tolerance (mode = complete|degraded|error). Aggregators:
 `merge_histograms`, `merge_agp_bands`, `concat_series`, `lttb_downsample`;
@@ -143,7 +143,7 @@ hermetic test suite). Single alembic head `0001_initial`.
 ## Deploy / cutover
 Server layout CLAUDE.md §7. Hard follow-ups: **#540** gateway
 `ANALYSE_BASE_URL` repoint, **#541** CDR2–6 read-identity flip, **#543** delete
-the group half from dashboard(cd-assist). See readme.md.
+the group half from dashboard. See readme.md.
 
 ## Port Allocation
 

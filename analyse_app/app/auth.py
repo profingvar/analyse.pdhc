@@ -2,7 +2,7 @@
 
 analyse.pdhc is the GROUP / population + federated-events half of the old
 dashboard. Its front door is the ANALYSIS phase (NOT care-delivery — that is
-cd-assist's gate):
+dashboard's gate):
 
     access = SU admin
              OR (professional AND 'analysis' in session_phases

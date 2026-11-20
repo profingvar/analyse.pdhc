@@ -3,7 +3,7 @@
 analyse.pdhc is the **population / research** workspace of the PDHC platform.
 It lets an analyst define a **cohort** of patients across the regional CDRs and
 look at aggregate, de-identified distributions — never a single patient's chart
-(that is the clinical dashboard / cd-assist).
+(that is the clinical dashboard).
 
 Access requires the **analysis phase** on your account (or SU admin). A
 treating clinician without the analysis phase will be turned away here — use

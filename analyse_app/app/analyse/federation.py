@@ -74,7 +74,7 @@ class CdrEndpoint:
 #: site mid-analysis. Do not rely on this dict to be that guard.
 NON_FEDERATED_CDRS = {
     "cdr1": ("care-delivery CDR — written by gateway.pdhc and read per-patient "
-             "by cd-assist. Not part of the analysis estate (#712)."),
+             "by dashboard. Not part of the analysis estate (#712)."),
 }
 
 

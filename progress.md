@@ -183,6 +183,10 @@ end-to-end (source-confirmed, not yet round-tripped live).
 
 Item 5 (deploy/cutover) remains the only open #579 item — operator-blocked.
 
+### 2026-11-20 — "cd-assist" removed; the care-delivery service is called dashboard
+- readme, docs/technical.md, docs/user_manual.md and code comments/docstrings (auth, extensions, __init__, analyse/__init__, federation NON_FEDERATED_CDRS note, models/audit) say dashboard. Historical design records (docs/470_scoping.md, docs/cutover_runbook.md) are left as written.
+- Comment/text only. Suite 693 passed. No deploy needed (the federation note is not shown to users).
+
 ### 2026-11-20 — coordinator merges per analysis, not per analysis type
 - Found on the demographics run: a spec with two `describe`s (sleep, birth year) returned ONE describe, n=102, mean 994 — both variables pooled. `combine` grouped partials by `kind`.
 - Nodes now tag each partial with `analysis_index` (its position in `spec.analyses`); the coordinator groups by it, keeps spec order and adds `analysis_index` + `vars` to each result.
