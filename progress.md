@@ -2507,3 +2507,4 @@ Operator chose cdr1 as a federation source. cdr1 now holds 8 759 observations / 
 - Federated run (ANALYSE_NODES given to that one command only, project 807-acceptance, sleep 9bbc1c9e): cdr1 ok n=51, cdr2/cdr3 ok n=0 (no sleep data there). Pooled describe n=51, mean 12.0 h. demographics.sex was "(missing)" for all 51.
 - Before and after, identical: smokes cdr1 18, gateway 9, rosetta 10, analyse 9, dashboard 13, request 8, ips 10. cdr1 itself was not touched.
 - Pending (operator, `.env`): `bash /tmp/add_cdr1_node.sh` adds cdr1 to ANALYSE_NODES in shared/.env and recreates only the coordinator, with auto-rollback.
+- 2026-11-20 07:3xZ operator ran add_cdr1_node.sh: ANALYSE_NODES=cdr1,cdr2,cdr3 (service names), coordinator recreated, role=coordinator, node/run 404, health 200. spec-run WITHOUT any override: cdr1 ok n=51, cdr2/cdr3 ok n=0, pooled 51. Smokes analyse 9, dashboard 13, cdr1 18. Operator script deleted from /tmp.
