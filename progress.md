@@ -187,7 +187,7 @@ Item 5 (deploy/cutover) remains the only open #579 item — operator-blocked.
 - Found on the demographics run: a spec with two `describe`s (sleep, birth year) returned ONE describe, n=102, mean 994 — both variables pooled. `combine` grouped partials by `kind`.
 - Nodes now tag each partial with `analysis_index` (its position in `spec.analyses`); the coordinator groups by it, keeps spec order and adds `analysis_index` + `vars` to each result.
 - Mixed versions: an untagged partial is placed only when its type occurs once in the spec; otherwise it is left out with a note, never guessed.
-- tests/test_merge_per_analysis.py (4; mutation-checked). Suite 693 passed. Not yet deployed (coordinator + node_cdr1/2/3).
+- tests/test_merge_per_analysis.py (4; mutation-checked). Suite 693 passed. Deployed 2026-11-20 07:54Z to coordinator (merge.py, base.py) and node_cdr1/2/3 (+runner.py); rollback tag :pre_merge. Rerun: three results, sleep n=51, sex 28/23, birth year n=51.
 
 ### #579 item-3 — one OPEN spärr question (must verify at cutover)
 The per-clinic filter needs un-redacted `source_scope_id` from ips `/blocks`.
