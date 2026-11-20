@@ -37,7 +37,7 @@ gateway.pdhc ──svc-key──┤ before_request loader (app/auth.py)
         └───────────────────────────────────────────────┘
                         │  app/analyse/federation.fanout (ThreadPool)
                         ▼  X-Source-Service: analyse.pdhc + ANALYSE_PDHC_SERVICE_KEY
-                    CDR2 … CDR6   (/api/v1/fhir/Observation, /api/v1/stats, …)
+                    CDR1 … CDR3   (/api/v1/fhir/Observation, /api/v1/stats, …)
 ```
 
 ### Auth (app/auth.py)
