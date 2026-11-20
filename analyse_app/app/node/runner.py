@@ -237,7 +237,7 @@ def run_spec(spec: AnalysisSpec, policy: NodePolicy, reader: NodeReader, *,
     # over every observation regardless of which variable it named.
     frame = build_frame(projected, spec)
 
-    for analysis in spec.analyses:
+    for index, analysis in enumerate(spec.analyses):
         module = REGISTRY.get(analysis.type)
         if module is None:
             run.notes.append(
@@ -257,6 +257,10 @@ def run_spec(spec: AnalysisSpec, policy: NodePolicy, reader: NodeReader, *,
             run.notes.append(
                 f"'{analysis.type}' produced no result at this source.")
             continue
+        # Which analysis this answers, so the coordinator never pools two
+        # analyses of the same type (two `describe`s over different
+        # variables were merged into one figure until 2026-11-20).
+        partial.analysis_index = index
         run.partials.append(partial.to_json())
 
     if not policy.may_pool:

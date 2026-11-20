@@ -119,20 +119,56 @@ def combine(spec: AnalysisSpec, node_runs: list[dict[str, Any]], *,
         if src in policies:
             merged_policy = merged_policy.stricter_of(policies[src])
 
-    # Group partials by analysis kind across sources.
-    by_kind: dict[str, list[Partial]] = {}
+    # Group partials by ANALYSIS across sources — the analysis's position in
+    # the spec. Until 2026-11-20 this grouped by `kind`, so a spec with two
+    # `describe`s (sleep and birth year) came back as ONE describe with n=102:
+    # both variables pooled into a single mean, with nothing to say so.
+    kinds_in_spec: dict[str, int] = {}
+    for a in spec.analyses:
+        kinds_in_spec[a.type] = kinds_in_spec.get(a.type, 0) + 1
+
+    groups: dict[Any, list[Partial]] = {}
+    unplaceable: set[str] = set()
     for run in poolable:
         for blob in run.get("partials", []):
             p = Partial.from_json(blob)
-            by_kind.setdefault(p.kind, []).append(p)
+            if p.analysis_index is not None:
+                key: Any = p.analysis_index
+            elif kinds_in_spec.get(p.kind, 0) <= 1:
+                # A node predating analysis_index. Unambiguous while the spec
+                # has at most one analysis of this kind, so place it there.
+                key = next((i for i, a in enumerate(spec.analyses)
+                            if a.type == p.kind), p.kind)
+            else:
+                # Ambiguous: refusing beats guessing which analysis this is.
+                unplaceable.add(run["node_id"])
+                continue
+            groups.setdefault(key, []).append(p)
 
-    for kind, parts in by_kind.items():
+    if unplaceable:
+        out.notes.append(
+            f"{', '.join(sorted(repr(s) for s in unplaceable))}: this spec has "
+            f"several analyses of the same type and the source did not say "
+            f"which one each of its results answers, so those results are "
+            f"left out rather than merged into the wrong analysis.")
+
+    def _order(item):
+        k = item[0]
+        return (0, k, "") if isinstance(k, int) else (1, 0, str(k))
+
+    for key, parts in sorted(groups.items(), key=_order):
+        kind = parts[0].kind
         module = REGISTRY.get(kind)
         if module is None:
             continue
         merged = module.merge(parts)
-        result = module.finalize(merged, merged_policy)
-        out.results.append(result.to_json())
+        result = module.finalize(merged, merged_policy).to_json()
+        if isinstance(key, int) and key < len(spec.analyses):
+            result["analysis_index"] = key
+            a = spec.analyses[key]
+            result["vars"] = (list(getattr(a, "vars", None) or [])
+                              or [v for v in [getattr(a, "var", None)] if v])
+        out.results.append(result)
 
     out.provenance = provenance(
         spec, coordinator_version=coordinator_version,

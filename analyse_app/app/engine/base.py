@@ -36,16 +36,23 @@ class Partial:
     #: Per-source partials retained through the merge, so every result can be
     #: given pooled AND per source without a second pass.
     by_source: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: Position of the analysis in `spec.analyses` (2026-11-20). The
+    #: coordinator merges partials that answer the SAME analysis; grouping by
+    #: `kind` alone pooled two `describe`s over different variables into one
+    #: figure. None from a node that predates the field.
+    analysis_index: int | None = None
 
     def to_json(self) -> dict[str, Any]:
         return {"kind": self.kind, "data": self.data, "source": self.source,
-                "by_source": self.by_source}
+                "by_source": self.by_source,
+                "analysis_index": self.analysis_index}
 
     @classmethod
     def from_json(cls, blob: dict[str, Any]) -> "Partial":
         return cls(kind=blob["kind"], data=blob["data"],
                    source=blob.get("source"),
-                   by_source=blob.get("by_source") or {})
+                   by_source=blob.get("by_source") or {},
+                   analysis_index=blob.get("analysis_index"))
 
 
 @dataclass
