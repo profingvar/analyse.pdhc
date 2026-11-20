@@ -2497,3 +2497,13 @@ All three now count only cohort members (boxplot/trend already did). Tests
 real members. Suite 680 pass. Deployed researcher.py 690a87fe82be → 387eaefd98cd,
 health 200. Live: empty cohort → histogram n=0 (before: everyone readable).
 Rollback: image `:pre_members`, file `researcher.py.pre_members`.
+
+## 2026-11-20 — #842: cdr1 node deployed (port 9112)
+Operator chose cdr1 as a federation source. cdr1 now holds 8 759 observations / 58 patients, all known to ips: 51 Hackathon_klin1, 6 Sim_vårdgivare, 1 KS.
+- Policy `/Users/miserver/analyse_node_config/node_policy_cdr1.yaml` (copy of cdr2's): `cdr_base_url https://cdr1.pdhc.se`, `source_clinic_id` Hackathon_klin1 (66481e2f), synthetic, k_min 5. Validated with NodePolicy.load.
+- `shared/node_cdr1.env` (no secrets): role=node, policy, cohort = the 51 Hackathon_klin1 patients. The 7 others are left out because spärr is asked about ONE source clinic.
+- Server compose (`current/docker-compose.yml`, not in git) gained `node_cdr1`; only that service was built and started. Backup in `~/backups/predeploy/analyse.pdhc/pre842_20261120T062047Z/`.
+- Verified: healthz 200; role=node; app/node + transport code identical to node_cdr2; unsigned node/run 401; coordinator node/run still 404.
+- Federated run (ANALYSE_NODES given to that one command only, project 807-acceptance, sleep 9bbc1c9e): cdr1 ok n=51, cdr2/cdr3 ok n=0 (no sleep data there). Pooled describe n=51, mean 12.0 h. demographics.sex was "(missing)" for all 51.
+- Before and after, identical: smokes cdr1 18, gateway 9, rosetta 10, analyse 9, dashboard 13, request 8, ips 10. cdr1 itself was not touched.
+- Pending (operator, `.env`): `bash /tmp/add_cdr1_node.sh` adds cdr1 to ANALYSE_NODES in shared/.env and recreates only the coordinator, with auto-rollback.
