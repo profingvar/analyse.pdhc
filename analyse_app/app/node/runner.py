@@ -122,6 +122,17 @@ def run_spec(spec: AnalysisSpec, policy: NodePolicy, reader: NodeReader, *,
     # source holding nothing for a cohort reported eight consent exclusions
     # that had not happened. A consent exclusion count is precisely the kind
     # of number that gets quoted, so it must not include absences.
+    # 4b — DEMOGRAPHICS, from the same CDR and under the same purpose
+    # (2026-11-20). Until this step existed nothing filled `demographics.*`
+    # on a real node, so every spec reading sex reported it "(missing)" for
+    # every patient. Read only when the spec asks for it: a field nobody
+    # analyses is not read.
+    demographics: dict[str, dict] = {}
+    if any(v.from_.startswith("demographics.") for v in spec.variables):
+        demographics = reader.read_demographics(
+            purpose=spec.purpose.value, patient_guids=eligible,
+            research_projects=research_projects)
+
     seen = {r.get("patient_guid") for r in rows if r.get("patient_guid")}
     not_returned = len(set(eligible) - seen)
     if not_returned:
@@ -162,6 +173,17 @@ def run_spec(spec: AnalysisSpec, policy: NodePolicy, reader: NodeReader, *,
             "Some observations at this source carry no usable date, so they "
             "are absent from any time-based result while still counting in "
             "the rest.")
+
+    # 5a' — attach demographics AFTER coarsening, so a patient-level fact is
+    # never counted as an undated observation. Only patients with observation
+    # rows get them: every cohort criterion names an observation, so a patient
+    # with demographics alone could never be a member, and inventing a row
+    # for them would move them from `not_returned` into a cohort exclusion
+    # that did not happen.
+    if demographics:
+        rows = [dict(r, demographics=demographics[r["patient_guid"]])
+                if r.get("patient_guid") in demographics else r
+                for r in rows]
 
     # 5b — pseudonymise, then project. Pseudonym first, so the raw guid is
     # gone before a record is built rather than being carried and dropped.

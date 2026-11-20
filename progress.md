@@ -2508,3 +2508,8 @@ Operator chose cdr1 as a federation source. cdr1 now holds 8 759 observations / 
 - Before and after, identical: smokes cdr1 18, gateway 9, rosetta 10, analyse 9, dashboard 13, request 8, ips 10. cdr1 itself was not touched.
 - Pending (operator, `.env`): `bash /tmp/add_cdr1_node.sh` adds cdr1 to ANALYSE_NODES in shared/.env and recreates only the coordinator, with auto-rollback.
 - 2026-11-20 07:3xZ operator ran add_cdr1_node.sh: ANALYSE_NODES=cdr1,cdr2,cdr3 (service names), coordinator recreated, role=coordinator, node/run 404, health 200. spec-run WITHOUT any override: cdr1 ok n=51, cdr2/cdr3 ok n=0, pooled 51. Smokes analyse 9, dashboard 13, cdr1 18. Operator script deleted from /tmp.
+
+## 2026-11-20 — Node reads demographics from its own CDR
+- `NodeReader.read_demographics`: `GET /api/v1/fhir/Patient?patient=…`, same purpose headers, 503 fails closed, unasked patient raises; returns only sex and birth_year.
+- `run_spec` reads them only when the spec uses `demographics.*` and attaches them after coarsening to patients with observation rows. Before this nothing filled demographics.* on a real node (cdr1: sex missing for 51/51).
+- Needs cdr's Patient search fix deployed. Tests: tests/test_node_demographics.py (9, runner part mutation-checked). Suite 689 passed.

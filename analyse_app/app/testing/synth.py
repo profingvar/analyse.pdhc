@@ -61,6 +61,17 @@ class _SynthReader:
         wanted = set(patient_guids)
         return [r for r in self.rows if r["patient_guid"] in wanted]
 
+    def read_demographics(self, *, purpose, patient_guids, **kw):
+        """The synthetic rows carry `demographics` inline; a real CDR serves
+        them as a Patient resource (NodeReader.read_demographics)."""
+        wanted = set(patient_guids)
+        out = {}
+        for r in self.rows:
+            g = r["patient_guid"]
+            if g in wanted and g not in out and r.get("demographics"):
+                out[g] = dict(r["demographics"])
+        return out
+
 
 def _policy(node_id: str, **over) -> NodePolicy:
     text = (f"node_id: {node_id}\n"

@@ -240,6 +240,72 @@ class NodeReader:
                 rows.extend(chunk)
         return rows
 
+    def read_demographics(self, *, purpose: str,
+                          patient_guids: Iterable[str],
+                          research_projects: Iterable[str] = (),
+                          ) -> dict[str, dict[str, Any]]:
+        """Sex and birth year per patient, from the SAME CDR (2026-11-20).
+
+        `GET /api/v1/fhir/Patient?patient=a,b` — the CDR matches a Patient on
+        its own guid. Same headers as the observation read, so the declared
+        purpose runs the consent join and an unanswerable ips is a 503 that
+        fails closed here too. A patient the CDR withholds is simply absent,
+        which the frame reports as missing.
+
+        Only two fields leave this function: `sex` (FHIR gender) and
+        `birth_year` (an int). A full birthDate, a name, an identifier — none
+        of it is read into the result, whatever the resource holds.
+        """
+        guids = sorted({g for g in patient_guids if g})
+        out: dict[str, dict[str, Any]] = {}
+        if not guids:
+            return out
+        headers = self._headers(purpose=purpose,
+                                research_projects=research_projects)
+        for i in range(0, len(guids), PATIENTS_PER_REQUEST):
+            batch = guids[i:i + PATIENTS_PER_REQUEST]
+            body = self._get_checked(
+                "Patient", {"patient": ",".join(batch), "_count": MAX_COUNT},
+                headers)
+            allowed = set(batch)
+            for entry in body.get("entry") or []:
+                res = entry.get("resource") or {}
+                if res.get("resourceType") != "Patient":
+                    continue
+                guid = res.get("id")
+                if guid not in allowed:
+                    raise ReadError(
+                        "the CDR returned a Patient that was not asked about "
+                        f"({str(guid)[:8]}…) — this read is wider than the "
+                        "cohort it was asked for")
+                out[guid] = {"sex": _sex_of(res),
+                             "birth_year": _birth_year_of(res)}
+        return out
+
+    def _get_checked(self, resource_type: str, params: dict[str, Any],
+                     headers: dict[str, str]) -> dict[str, Any]:
+        """One FHIR search with the same status handling as the observation
+        read: 503 fails closed, 400 is reported, a full page is refused."""
+        try:
+            r = requests.get(
+                f"{self.base_url.rstrip('/')}/api/v1/fhir/{resource_type}",
+                params=params, headers=headers, timeout=self.timeout)
+        except requests.RequestException as e:
+            raise ReadError(f"read failed: {e}") from e
+        if r.status_code == 503:
+            raise ConsentUnavailable(
+                "the consent filter is unavailable — this read fails closed "
+                "rather than returning unfiltered data")
+        if r.status_code == 400:
+            raise ReadError(f"the CDR refused this read: {r.text[:200]}")
+        if r.status_code != 200:
+            raise ReadError(f"read returned {r.status_code}")
+        body = r.json() or {}
+        if len(body.get("entry") or []) >= MAX_COUNT:
+            raise TruncatedRead(
+                f"this read filled cdr's maximum page ({MAX_COUNT} rows)")
+        return body
+
     def _read_batch(self, batch: list[str], code: str | None,
                     headers: dict[str, str]) -> list[dict[str, Any]]:
         """Read one (patient batch x concept), SPLITTING on truncation.
@@ -444,6 +510,23 @@ class NodeReader:
 # missingness) and a reader that raised on an incomplete resource would make
 # one odd row lose a whole cohort's read.
 # ---------------------------------------------------------------------------
+
+_GENDERS = frozenset({"male", "female", "other", "unknown"})
+
+
+def _sex_of(res: dict) -> str | None:
+    g = str(res.get("gender") or "").strip().lower()
+    return g if g in _GENDERS and g != "unknown" else None
+
+
+def _birth_year_of(res: dict) -> int | None:
+    """FHIR birthDate may be YYYY, YYYY-MM or YYYY-MM-DD; only the year is
+    kept. Anything unparseable is missing, not an error."""
+    raw = str(res.get("birthDate") or "")
+    if len(raw) >= 4 and raw[:4].isdigit():
+        return int(raw[:4])
+    return None
+
 
 def _subject_guid(res: dict) -> str | None:
     """`subject.reference` is "Patient/<guid>"; the identifier form is the
