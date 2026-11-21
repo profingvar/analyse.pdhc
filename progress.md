@@ -2523,3 +2523,10 @@ Operator chose cdr1 as a federation source. cdr1 now holds 8 759 observations / 
 - `NodeReader.read_demographics`: `GET /api/v1/fhir/Patient?patient=…`, same purpose headers, 503 fails closed, unasked patient raises; returns only sex and birth_year.
 - `run_spec` reads them only when the spec uses `demographics.*` and attaches them after coarsening to patients with observation rows. Before this nothing filled demographics.* on a real node (cdr1: sex missing for 51/51).
 - Needs cdr's Patient search fix deployed. Tests: tests/test_node_demographics.py (9, runner part mutation-checked). Suite 689 passed.
+
+## 2026-11-22 — #1022 eps rename code DEPLOYED
+
+- Overlay image on the running one, baseline-hashed first; rollback tag `:pre_eps`, replaced release files kept as `*.pre_eps.<ts>`.
+- Health 200 and file hashes verified in the container; sibling smoke green before (pre-rename smoke) and after.
+- No behaviour change until `EPS_*` is set in .env: operator script `/tmp/epsdep/eps_env.sh <group>` (refuses until https://eps.pdhc.se answers as eps.pdhc).
+- Deployed analyse was BEHIND git (`__init__.py` on all four, `node/reader.py` on the app, `routes/researcher.py` on node_cdr2/3, which also lack `analyse/measure_counts.py`). So only the #1022 diff was laid on the DEPLOYED files (patch applied cleanly, py_compile ok); the pending commits were NOT shipped. Converging analyse onto git is still open.
