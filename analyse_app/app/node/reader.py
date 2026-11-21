@@ -453,7 +453,7 @@ class NodeReader:
             return set()
         if not ips_base_url:
             raise ConsentUnavailable(
-                "IPS_BASE_URL is not configured, so spärr cannot be checked "
+                "EPS_BASE_URL (or the deprecated IPS_BASE_URL) is not configured, so spärr cannot be checked "
                 "and every patient is treated as blocked")
         if not source_clinic_id:
             raise ConsentUnavailable(
@@ -462,7 +462,7 @@ class NodeReader:
                 "policy file; until then every patient is treated as blocked")
         if not ips_api_key:
             raise ConsentUnavailable(
-                "IPS_API_KEY is not configured, so ips will refuse the spärr "
+                "EPS_API_KEY (or the deprecated IPS_API_KEY) is not configured, so ips will refuse the spärr "
                 "check and every patient is treated as blocked")
 
         base = ips_base_url.rstrip("/")

@@ -110,7 +110,7 @@ partial-result tolerance (mode = complete|degraded|error). Aggregators:
 mergers consume.
 
 ### Consent (app/services/ips_client.py)
-Cohort member sets pass through ips.pdhc's `analysis-filter` (purpose=research)
+Cohort member sets pass through eps.pdhc's (formerly ips.pdhc) `analysis-filter` (purpose=research)
 before persist/aggregate — ips owns the consent flags (D1 #404); the verdict is
 never computed locally and **fails closed** (503) if ips is unreachable.
 analyse calls it with `ANALYSE_PDHC_SERVICE_KEY`.
@@ -130,7 +130,7 @@ hermetic test suite). Single alembic head `0001_initial`.
 ## Config (analyse_app/.env.example)
 `APP_PORT=9110`, `DB_PORT=9111` (127.0.0.1 only), `COMPOSE_PROJECT_NAME=analyse_pdhc`,
 `AUTH_MODE`, `SSO_*`, `GATEWAY_PDHC_SERVICE_KEY`, `MONITOR_PDHC_SERVICE_KEY`,
-`ANALYSE_PDHC_SERVICE_KEY`, `IPS_BASE_URL`, `CDR_ENDPOINTS` (comma-sep;
+`ANALYSE_PDHC_SERVICE_KEY`, `EPS_BASE_URL` / `EPS_API_KEY` (#1022; `IPS_BASE_URL` / `IPS_API_KEY` are the deprecated fallback, read via `app/eps_env.py`), `CDR_ENDPOINTS` (comma-sep;
 `https://cdrN.pdhc.se` or `cdrN=http://127.0.0.1:PORT`), `CDR_FANOUT_TIMEOUT`.
 
 ## Run / test

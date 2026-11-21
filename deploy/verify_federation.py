@@ -31,6 +31,7 @@ per source, so the real answer is per row.
 """
 import os, sys
 sys.path.insert(0, "/app")
+from app.eps_env import eps_env
 from app.coordinator import combine
 from app.node import NodePolicy, NodeReader, run_spec
 from app.privacy import ProjectKey
@@ -38,8 +39,13 @@ from app.spec import AnalysisSpec
 import requests
 
 KEY = os.environ["ANALYSE_PDHC_SERVICE_KEY"]
-IPS = os.environ["IPS_BASE_URL"]
-IPS_KEY = os.environ["IPS_API_KEY"]
+# #1022: EPS_* first, IPS_* as the deprecated fallback. Neither set is a
+# KeyError at import, exactly as the bare os.environ[...] read was.
+IPS = eps_env("BASE_URL", None)
+IPS_KEY = eps_env("API_KEY", None)
+for _name, _val in (("BASE_URL", IPS), ("API_KEY", IPS_KEY)):
+    if _val is None:
+        raise KeyError(f"EPS_{_name} (or the deprecated IPS_{_name})")
 SOURCES = [("cdr2", "http://host.docker.internal:9146"),
            ("cdr3", "http://host.docker.internal:9246")]
 H = {"X-Service-Key": KEY, "X-Source-Service": "analyse.pdhc",

@@ -41,7 +41,7 @@ half from dashboard.
 - Release-symlink layout under `/usr/local/www/analyse.pdhc/` (CLAUDE.md §7).
 - Fill `.env` with `AUTH_MODE=sso`, real SSO client creds (registered as the
   `analyse` consumer in sso.pdhc), `SSO_CALLBACK_URL=https://analyse.pdhc.se/auth/callback`,
-  the CDR2–6 `CDR_ENDPOINTS` loopback URLs, `IPS_BASE_URL`, and the three
+  the CDR2–6 `CDR_ENDPOINTS` loopback URLs, `EPS_BASE_URL` + `EPS_API_KEY` (`IPS_*` still read as deprecated fallback, #1022), and the three
   service keys.
 - `flask create-su --username <op> --password <pw>` (Rule 23 bootstrap).
 - Reverse-proxy vhost `analyse.pdhc.se` → 127.0.0.1:9110 (operator).

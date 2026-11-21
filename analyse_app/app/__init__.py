@@ -16,6 +16,7 @@ import re
 
 from flask import Flask
 
+from app.eps_env import eps_env
 from app.extensions import db, migrate
 
 
@@ -126,7 +127,8 @@ def create_app(config=None) -> Flask:
         app.config.setdefault("CDR_FANOUT_TIMEOUT", 15.0)
 
     # --- Consent join (ips.pdhc analysis-filter, research reads) ----------
-    app.config.setdefault("IPS_BASE_URL", os.environ.get("IPS_BASE_URL", ""))
+    # #1022: EPS_BASE_URL first, IPS_BASE_URL as the deprecated fallback.
+    app.config.setdefault("IPS_BASE_URL", eps_env("BASE_URL", ""))
     # #758: plan.pdhc, for concept display names on the researcher inventory.
     # Declared here because a variable that exists in .env and not in config is
     # read as absent — exactly how IPS_API_KEY sat unused below.
@@ -139,7 +141,8 @@ def create_app(config=None) -> Flask:
     # true of the config and false of the environment, and sent the operator
     # looking at the .env they had just correctly edited.
     # ips reads ONLY `Authorization: ApiKey <key>` (see infra_ips_auth_header_scheme).
-    app.config.setdefault("IPS_API_KEY", os.environ.get("IPS_API_KEY", ""))
+    # #1022: EPS_API_KEY first, IPS_API_KEY as the deprecated fallback.
+    app.config.setdefault("IPS_API_KEY", eps_env("API_KEY", ""))
 
     # --- Federation roles (#684 / AN-12) ----------------------------------
     # ONE deployable runs either role; the role comes from config, not from a

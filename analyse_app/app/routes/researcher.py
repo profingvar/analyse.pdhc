@@ -132,12 +132,15 @@ def _resolve_members(filt: CohortFilter) -> tuple[set[str], dict]:
             except IpsUnreachable as e:
                 current_app.logger.error("patient registry unavailable: %s", e)
                 abort(503, description=(
-                    "the patient registry (ips.pdhc) is unavailable, so this "
+                    "the patient registry (eps.pdhc) is unavailable, so this "
                     "cohort cannot be resolved — it fails closed rather than "
                     "matching everyone"))
             per_predicate_sets.append(ids)
             summary["predicates"].append({
-                "resource_type": "Patient", "source": "ips.pdhc",
+                # #1022: the registry is eps.pdhc now. Nothing reads this
+                # label back (it is returned, never stored or matched), so
+                # there is no reader that must also accept "ips.pdhc".
+                "resource_type": "Patient", "source": "eps.pdhc",
                 "params": {k: v for k, v in params.items()
                            if k not in ("_count",)},
                 "matched": len(ids),
@@ -276,7 +279,7 @@ def _apply_research_consent(members: set[str]) -> tuple[set[str], dict]:
     except IpsUnreachable as e:
         current_app.logger.error("analysis-filter unavailable: %s", e)
         abort(503, description=(
-            "consent filter (ips.pdhc) unavailable — secondary-use reads "
+            "consent filter (eps.pdhc) unavailable — secondary-use reads "
             "fail closed"))
     allowed = set(verdict["allowed"])
     reasons: dict[str, int] = {}

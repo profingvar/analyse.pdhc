@@ -67,7 +67,7 @@ class NodeContext:
             # it a node would read nothing at all; saying so at startup beats
             # discovering it as an empty result.
             raise NodeNotConfigured(
-                "IPS_BASE_URL is not set — spärr and the consent verdict live "
+                "EPS_BASE_URL (or the deprecated IPS_BASE_URL) is not set — spärr and the consent verdict live "
                 "in ips.pdhc and both fail closed, so this node could not "
                 "lawfully read anything")
 

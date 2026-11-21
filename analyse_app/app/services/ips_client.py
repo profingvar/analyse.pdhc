@@ -42,7 +42,6 @@ from __future__ import annotations
 
 import re
 
-import os
 import threading
 import time
 from dataclasses import dataclass
@@ -50,6 +49,8 @@ from typing import Iterable
 
 import requests
 from flask import current_app
+
+from app.eps_env import eps_env
 
 
 DEFAULT_TTL_SECONDS = 30  # legal 2026-06-04
@@ -119,7 +120,7 @@ class IpsClient:
         # than a scheme problem. Registry queries use this key.
         self.api_key = api_key
         self.base_url = (
-            base_url or os.environ.get("IPS_BASE_URL", "")
+            base_url or eps_env("BASE_URL", "")
         ).rstrip("/")
         self.timeout = timeout
 
@@ -257,7 +258,7 @@ class IpsClient:
         moment a sibling went down.
         """
         if not self.base_url:
-            raise IpsUnreachable("IPS_BASE_URL not configured")
+            raise IpsUnreachable("EPS_BASE_URL (or IPS_BASE_URL) not configured")
         body: dict = {}
         if age_min is not None:
             body["age_min"] = age_min
@@ -294,7 +295,7 @@ class IpsClient:
         if not patient_guids:
             return {"allowed": [], "excluded": []}
         if not self.base_url:
-            raise IpsUnreachable("IPS_BASE_URL not configured")
+            raise IpsUnreachable("EPS_BASE_URL (or IPS_BASE_URL) not configured")
         url = f"{self.base_url}/api/v1/patients/analysis-filter"
         try:
             r = requests.post(

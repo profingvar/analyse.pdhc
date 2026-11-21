@@ -352,3 +352,14 @@
 - analyse_app/app/routes/researcher.py
 - analyse_app/tests/test_cohort_member_scoping.py (new)
 - analyse_app/tests/test_researcher_flow.py
+
+## 2026-11-21 — #1022 EPS rename phase 3: EPS_* first, IPS_* as fallback
+- analyse_app/app/eps_env.py (new) — the one reader of EPS_/IPS_ BASE_URL and API_KEY
+- analyse_app/app/__init__.py — IPS_BASE_URL / IPS_API_KEY config keys via eps_env
+- analyse_app/app/services/ips_client.py — env fallback via eps_env
+- analyse_app/app/routes/researcher.py — Patient predicate source label "eps.pdhc"; 503 texts name eps.pdhc
+- analyse_app/app/node/reader.py, analyse_app/app/node/service.py — unset messages name EPS_* first
+- deploy/verify_federation.py, deploy/verify_gates.py — via eps_env, still KeyError when neither is set
+- .env.example, analyse_app/.env.example — EPS_*; IPS_* marked deprecated fallback
+- docs/technical.md, readme.md
+- analyse_app/tests/test_eps_env.py (new)

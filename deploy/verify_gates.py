@@ -18,6 +18,7 @@ decision and a production write.
 """
 import os, sys
 sys.path.insert(0, "/app")
+from app.eps_env import eps_env
 from app.node import NodePolicy, NodeReader, run_spec
 from app.node.reader import ConsentUnavailable, ReadError
 from app.node.policy import PolicyError
@@ -26,8 +27,13 @@ from app.spec import AnalysisSpec
 import requests
 
 KEY = os.environ["ANALYSE_PDHC_SERVICE_KEY"]
-IPS = os.environ["IPS_BASE_URL"]
-IPS_KEY = os.environ["IPS_API_KEY"]
+# #1022: EPS_* first, IPS_* as the deprecated fallback. Neither set is a
+# KeyError at import, exactly as the bare os.environ[...] read was.
+IPS = eps_env("BASE_URL", None)
+IPS_KEY = eps_env("API_KEY", None)
+for _name, _val in (("BASE_URL", IPS), ("API_KEY", IPS_KEY)):
+    if _val is None:
+        raise KeyError(f"EPS_{_name} (or the deprecated IPS_{_name})")
 BASE = "http://host.docker.internal:9146"
 H = {"X-Service-Key": KEY, "X-Source-Service": "analyse.pdhc",
      "X-Access-Purpose": "statistics", "Accept": "application/json"}
