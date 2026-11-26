@@ -2577,6 +2577,13 @@ What counts as a disclosure here (classified by what leaves analyse):
   mutation-checked (fail when the outbox commits separately / without the
   `finally`); two controls show the never-blocks checks discriminate. Suite
   706 → 724 passed.
+- Aligned the same day with record.pdhc's validator: the source event id
+  travels in BOTH `identifier` and the extension
+  `https://record.pdhc.se/fhir/StructureDefinition/source-event-id`; a 400 is
+  terminal (`status='rejected'`, not re-sent), 401/403/5xx/network stay
+  pending; >4999 references fall back to the summary entity; backfilled
+  events carry `count=0` + `count_known=false`. A test re-implements record's
+  rules independently (`record_validator_errors`, with a control). Suite 727.
 - Deploy: record.pdhc's endpoint must be live first; `flask db upgrade`; then
   `send-disclosures --backfill` (read the counts) before `--apply`. Backfill
   numbers not measured — no local data. Known gap left as-is: if the receipt

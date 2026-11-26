@@ -16,7 +16,9 @@ Columns:
   - ``patient_guid``   the eps patient GUID (Rule 18).
   - ``export_ref``     the export_id of the receipt this row belongs to.
   - ``payload``        the complete FHIR R5 AuditEvent, frozen at write time.
-  - ``status``         'pending' | 'sent'.
+  - ``status``         'pending' | 'sent' | 'rejected'. 'rejected' is
+    terminal: record.pdhc answered 400 (the event itself is invalid), so
+    re-sending it cannot help; ``send-disclosures`` skips it.
   - ``attempts``, ``last_error`` — last_error is a NAME (``http_403``,
     ``record_not_configured: RECORD_BASE_URL unset``), never a body.
   - ``record_id``      record.pdhc's id for the stored AuditEvent, once sent.

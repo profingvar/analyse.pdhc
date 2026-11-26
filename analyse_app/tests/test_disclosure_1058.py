@@ -125,6 +125,97 @@ def _check_contract(ev, patient):
     assert sid["value"].endswith(":" + patient)
 
 
+import json as _json
+import re as _re
+from datetime import datetime as _dt
+
+_REF = _re.compile(r"^[A-Za-z]+/[^/:\s]+(/_history/[^/:\s]+)?$")
+
+
+def record_validator_errors(ev, source="analyse.pdhc"):
+    """record.pdhc's validator rules for #1058, as the record agent stated
+    them (2026-11-26). Independent of app.disclosure: literals, not BALP."""
+    e = []
+    if ev.get("meta", {}).get("profile") != [
+            "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.PrivacyDisclosure.Source"]:
+        e.append("profile")
+    ids = ev.get("identifier") or []
+    ext = [x for x in ev.get("extension") or [] if x.get("url") ==
+           "https://record.pdhc.se/fhir/StructureDefinition/source-event-id"]
+    if len(ids) != 1 or len(ext) != 1 or ext[0].get("valueIdentifier") != ids[0]:
+        e.append("source_event_id")
+    elif ids[0].get("system") != f"https://{source.split('.')[0]}.pdhc.se/disclosure" \
+            or not 0 < len(ids[0].get("value") or "") <= 128:
+        e.append("source_event_id_shape")
+    if ev.get("action") != "R":
+        e.append("action")
+    if _dt.fromisoformat(ev["recorded"]).tzinfo is None:
+        e.append("recorded_tz")
+    oc = ev.get("outcome", {}).get("code", {})
+    if oc.get("system") != "http://terminology.hl7.org/CodeSystem/issue-severity" \
+            or oc.get("code") not in {"success", "information", "warning", "error", "fatal"}:
+        e.append("outcome")
+    codes = [c for a in ev.get("authorization") or [] for c in a.get("coding") or []]
+    if not codes or any(c.get("system") != "http://terminology.hl7.org/CodeSystem/v3-ActReason"
+                        or c.get("code") not in {"TREAT", "COC", "PATRQT", "HRESCH", "HLEGAL"}
+                        for c in codes):
+        e.append("authorization")
+    role = lambda x: (x.get("role", {}).get("coding") or [{}])[0].get("code")
+    pats = [x for x in ev["entity"] if role(x) == "1"]
+    if len(pats) != 1 or pats[0]["what"].get("identifier") != ev["patient"].get("identifier"):
+        e.append("patient_entity")
+    atype = lambda a: (a.get("type", {}).get("coding") or [{}])[0].get("code")
+    src = [a for a in ev["agent"] if atype(a) == "110153"]
+    want = {"system": "https://pdhc.se/fhir/service", "value": source}
+    if len(src) != 1 or src[0]["who"].get("identifier") != want \
+            or ev["source"]["observer"] != src[0]["who"]:
+        e.append("source_agent")
+    rcp = [a for a in ev["agent"] if atype(a) == "110152"]
+    if len(rcp) != 1 or not (rcp[0]["who"].get("display")
+                             or (rcp[0]["who"].get("identifier") or {}).get("value")):
+        e.append("recipient_agent")
+    data = [x for x in ev["entity"] if role(x) == "4"]
+    if not data or len(data) > 5000:
+        e.append("data_entities")
+    for x in data:
+        d = {i["type"]["text"]: i for i in x.get("detail") or []}
+        ref = x["what"].get("reference")
+        ok_ref = bool(ref) and bool(_REF.match(ref)) and "::" not in ref
+        ok_det = bool((d.get("description") or {}).get("valueString")) \
+            and isinstance((d.get("count") or {}).get("valueInteger"), int) \
+            and d["count"]["valueInteger"] >= 0
+        if not (ok_ref or ok_det):
+            e.append("data_entity_shape")
+        if "sha256" in d and not _re.fullmatch(r"[0-9a-f]{64}", d["sha256"]["valueString"]):
+            e.append("sha256")
+    if len(_json.dumps(ev).encode()) > 1_000_000:
+        e.append("size")
+    return e
+
+
+def test_validator_catches_a_broken_event():
+    """Control: the validator is not a rubber stamp."""
+    from datetime import timezone
+    ev = D.build_audit_event(export_id="e", patient_guid=P1,
+                             recorded=_dt(2026, 1, 1, tzinfo=timezone.utc),
+                             recipient_user=None, description="d", count=1)
+    assert record_validator_errors(ev) == []
+    ev["extension"][0]["valueIdentifier"] = {"system": "x", "value": "y"}
+    ev["authorization"][0]["coding"][0]["code"] = "TREATX"
+    assert set(record_validator_errors(ev)) >= {"source_event_id", "authorization"}
+
+
+def test_too_many_references_fall_back_to_the_summary():
+    from datetime import timezone
+    refs = [f"Observation/o{i}/_history/1" for i in range(5000)] + ["http://abs/x"]
+    ev = D.build_audit_event(export_id="e", patient_guid=P1,
+                             recorded=_dt(2026, 1, 1, tzinfo=timezone.utc),
+                             recipient_user="u", description="d", count=5000,
+                             references=refs)
+    assert record_validator_errors(ev) == []
+    assert len(ev["entity"]) == 2
+
+
 def test_export_writes_one_disclosure_per_patient_in_the_file(members):
     app = _app()
     sent = []
@@ -138,6 +229,8 @@ def test_export_writes_one_disclosure_per_patient_in_the_file(members):
     assert rows[0][4] == "rec-1111"
     p1 = rows[0][5]
     _check_contract(p1, P1)
+    assert record_validator_errors(p1) == []
+    assert record_validator_errors(rows[1][5]) == []
     _check_contract(rows[1][5], P2)
     refs = [e["what"].get("reference") for e in p1["entity"] if e["what"].get("reference")]
     assert refs == ["Observation/o-1/_history/2", "Observation/o-2/_history/1"]
@@ -162,15 +255,28 @@ def test_duplicate_200_counts_as_sent(members):
     assert {s for _, s, *_ in _rows(app)} == {"sent"}
 
 
-@pytest.mark.parametrize("status,name", [(400, "http_400: bad_profile"),
-                                         (401, "http_401"), (403, "http_403")])
-def test_refusal_keeps_rows_pending_with_the_name(members, status, name):
+@pytest.mark.parametrize("status,name", [(401, "http_401"), (403, "http_403"),
+                                         (503, "http_503")])
+def test_retryable_refusal_keeps_rows_pending_with_the_name(members, status, name):
     app = _app()
-    body = {"reason": "bad_profile"} if status == 400 else {}
-    r, _ = _export(app, lambda *a, **k: _Resp(status, body))
+    r, _ = _export(app, lambda *a, **k: _Resp(status, {}))
     assert r.status_code == 200
     rows = _rows(app)
     assert {(s, a, e) for _, s, a, e, *_ in rows} == {("pending", 1, name)}
+
+
+def test_400_is_terminal_rejected_and_not_resent(members):
+    app = _app()
+    r, _ = _export(app, lambda *a, **k: _Resp(400, {"error": "bad_profile"}))
+    assert r.status_code == 200
+    rows = _rows(app)
+    assert {(s, a, e) for _, s, a, e, *_ in rows} == {
+        ("rejected", 1, "http_400: bad_profile")}
+    calls = []
+    with patch("app.disclosure.requests.post",
+               side_effect=lambda *a, **k: calls.append(1) or _Resp(201)):
+        res = app.test_cli_runner().invoke(args=["send-disclosures"])
+    assert calls == [] and "sent=0" in res.output
 
 
 def test_not_configured_is_named_and_export_still_succeeds(members):
@@ -354,7 +460,9 @@ def test_backfill_counts_dry_run_then_apply(members):
     assert ev["identifier"][0]["value"] == f"e-old-1:{P1}"
     detail = {d["type"]["text"]: d for d in ev["entity"][1]["detail"]}
     assert detail["backfilled"]["valueBoolean"] is True
-    assert "count" not in detail
+    assert detail["count"]["valueInteger"] == 0
+    assert detail["count_known"]["valueBoolean"] is False
+    assert record_validator_errors(ev) == []
 
 
 def test_apply_without_backfill_is_refused(members):

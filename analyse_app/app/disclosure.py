@@ -28,7 +28,9 @@ The wire contract (fixed with record.pdhc)
 ``X-Service-Key`` (``RECORD_DISCLOSURE_KEY``) and
 ``Content-Type: application/fhir+json``; one AuditEvent per patient. 201 is
 new, 200 a duplicate of the same ``source_event_id`` — both mean "record has
-it". Anything else leaves the outbox row pending with the reason NAMED.
+it". A 400 means the event itself is invalid: the row becomes ``rejected``
+(terminal) with ``http_400: <reason>``. 401/403/5xx/network leave it
+``pending`` with the reason NAMED, for ``flask send-disclosures``.
 
 ``RECORD_BASE_URL`` has NO fallback. Unset reads as unset and is reported by
 name (``record_not_configured: RECORD_BASE_URL unset``); it is never replaced
@@ -37,6 +39,7 @@ by a loopback or public default (CLAUDE.md §7, #833).
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from datetime import datetime, timezone
 from typing import Any, Iterable
@@ -76,6 +79,13 @@ IDENTIFIER_SYSTEM = "https://analyse.pdhc.se/disclosure"
 USER_SYSTEM = "https://sso.pdhc.se/fhir/user"
 OUTCOME_SYSTEM = "http://terminology.hl7.org/CodeSystem/issue-severity"
 SEND_TIMEOUT = 5.0
+#: R5 has no AuditEvent.identifier; record.pdhc reads the source event id
+#: from this extension AND the top-level identifier, and they must agree.
+SOURCE_EVENT_ID_EXT = "https://record.pdhc.se/fhir/StructureDefinition/source-event-id"
+#: record.pdhc's limit is 5000 data entities; one is the summary.
+MAX_REFERENCES = 4999
+#: record.pdhc accepts relative Type/id(/_history/v) only.
+_REF_RE = re.compile(r"^[A-Z][A-Za-z]+/[A-Za-z0-9\-.]{1,64}(/_history/[A-Za-z0-9\-.]{1,64})?$")
 
 
 class NotConfigured(RuntimeError):
@@ -123,7 +133,13 @@ def build_audit_event(*, export_id: str, patient_guid: str, recorded: datetime,
          "role": {"coding": [BALP["entity_data_role"]]},
          "detail": details},
     ]
-    for ref in references:
+    refs = [r for r in references if r and _REF_RE.match(r)]
+    if len(refs) > MAX_REFERENCES:
+        # Too many for one event: the summary's description + count stand in.
+        details.append({"type": {"text": "references_omitted"},
+                        "valueInteger": len(refs)})
+        refs = []
+    for ref in refs:
         entities.append({"what": {"reference": ref},
                          "role": {"coding": [BALP["entity_data_role"]]}})
 
@@ -131,11 +147,13 @@ def build_audit_event(*, export_id: str, patient_guid: str, recorded: datetime,
                       "display": "researcher (export requester)"}
                      if recipient_user else {"display": "unknown requester"})
     when = recorded if recorded.tzinfo else recorded.replace(tzinfo=timezone.utc)
+    sid = {"system": IDENTIFIER_SYSTEM,
+           "value": source_event_id(export_id, patient_guid)}
     return {
         "resourceType": "AuditEvent",
         "meta": {"profile": [BALP["profile"]]},
-        "identifier": [{"system": IDENTIFIER_SYSTEM,
-                        "value": source_event_id(export_id, patient_guid)}],
+        "extension": [{"url": SOURCE_EVENT_ID_EXT, "valueIdentifier": dict(sid)}],
+        "identifier": [dict(sid)],
         "category": [{"coding": [BALP["category"]]}],
         "code": {"coding": [BALP["code"]]},
         "action": BALP["action"],
@@ -208,7 +226,7 @@ def post_event(config, event: dict) -> str | None:
     try:
         body = r.json()
         if isinstance(body, dict):
-            reason = str(body.get("reason") or body.get("error") or "")[:120]
+            reason = str(body.get("error") or body.get("reason") or "")[:120]
     except ValueError:
         pass
     raise RuntimeError(f"http_{r.status_code}" + (f": {reason}" if reason else ""))
@@ -219,6 +237,7 @@ def send_rows(session, config, rows) -> dict:
     send failure. Stops after the first transport error, so an unreachable
     record.pdhc costs one timeout, not one per patient."""
     out = {"sent": 0, "failed": 0, "skipped": 0}
+    rows = [r for r in rows if r.status == "pending"]
     try:
         _endpoint(config)
     except NotConfigured as exc:
@@ -244,6 +263,10 @@ def send_rows(session, config, rows) -> dict:
         except Exception as exc:  # noqa: BLE001 — the name is the record
             row.last_error = str(exc)[:500]
             out["failed"] += 1
+            if str(exc).startswith("http_400"):
+                # record says the event itself is wrong: re-sending the same
+                # payload can never succeed. Terminal, kept for a human.
+                row.status = "rejected"
             if str(exc).startswith("transport_error"):
                 stop = True
         else:
@@ -369,8 +392,11 @@ def backfill(session, *, apply: bool = False) -> dict:
                 description=(f"analyse.pdhc research CSV export {export_id} of "
                              f"cohort {cohort_id}, variables "
                              f"{', '.join(variables)}; {BACKFILL_NOTE}"),
-                count=None,
-                extra_details={"export_total_rows": int(rec.n_rows_returned),
+                # record requires a count beside the description; the true
+                # per-patient count is unknown, so 0 + count_known=false.
+                count=0,
+                extra_details={"count_known": False,
+                               "export_total_rows": int(rec.n_rows_returned),
                                "backfilled": True},
             )
             enqueue(session, export_id=export_id, patient_guid=pat, event=event)
