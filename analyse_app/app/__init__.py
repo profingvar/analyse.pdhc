@@ -176,6 +176,21 @@ def create_app(config=None) -> Flask:
     except ValueError:
         app.config.setdefault("ANALYSE_NODE_TIMEOUT", 60.0)
 
+    # --- Disclosures to record.pdhc (#1058) --------------------------------
+    # Public subdomain (https://record.pdhc.se). Deliberately NO default: unset
+    # reads as unset and every send fails by name, "record_not_configured:
+    # RECORD_BASE_URL unset" — never a loopback guess. The export itself is
+    # unaffected either way; rows wait in disclosure_outbox.
+    app.config.setdefault(
+        "RECORD_BASE_URL", os.environ.get("RECORD_BASE_URL", "").strip())
+    app.config.setdefault(
+        "RECORD_DISCLOSURE_KEY",
+        os.environ.get("RECORD_DISCLOSURE_KEY", "").strip())
+    # thread (default) | inline | off — see app.disclosure.send_after_commit.
+    app.config.setdefault(
+        "DISCLOSURE_SEND_MODE",
+        os.environ.get("DISCLOSURE_SEND_MODE", "thread").strip() or "thread")
+
     db.init_app(app)
     # Import models so Alembic autogenerate + create_all see every table.
     from app import models  # noqa: F401
@@ -228,6 +243,9 @@ def create_app(config=None) -> Flask:
         app.register_blueprint(node_api_bp)
 
     register_export_audit_cli(app)
+    # #1058: `flask send-disclosures` — retry + backfill to record.pdhc.
+    from app.disclosure import register_cli as register_disclosure_cli
+    register_disclosure_cli(app)
     # #644: `flask spec-schema` regenerates the JSON Schema artefact from the
     # models, so the committed schema cannot drift from what it describes.
     from app.cli import register_spec_cli

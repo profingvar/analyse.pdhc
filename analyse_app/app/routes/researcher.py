@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import csv
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
 import io
 import json
 import uuid
@@ -46,6 +47,7 @@ from app.analyse.aggregations import aggregate_per_cdr_results
 from app.analyse import measure_counts
 from app.analyse.concept_display import fill_displays as _fill_concept_displays
 from app.services.role_guards import researcher_required
+from app import disclosure as _disclosure
 
 
 bp = Blueprint("researcher_api", __name__, url_prefix="/api")
@@ -802,15 +804,46 @@ def cohort_export(cohort_id: str):
     cdr_filter = (cohort["filter"].get("cdr_ids") or [])
     export_id = str(uuid.uuid4())
 
+    app_obj = current_app._get_current_object()
+
     @stream_with_context
     def _stream():
+        # #1058: what each patient was given, so every patient in the file
+        # gets one disclosure. `sent` hashes what actually left, so the
+        # AuditEvent carries the file's sha256.
+        per_patient: dict[str, dict] = {}
+        digest = hashlib.sha256()
+        state = {"row_count": 0, "complete": False}
+
+        def _out(chunk: str) -> str:
+            digest.update(chunk.encode("utf-8"))
+            return chunk
+
+        try:
+            yield from _rows(per_patient, state, _out)
+            state["complete"] = True
+        finally:
+            # Also on a client disconnect or a mid-stream failure: rows that
+            # already left are still disclosed (#1058 "every export").
+            _record_export_audit(
+                export_id=export_id,
+                cohort_id=cohort_id,
+                variables=variables,
+                row_count=state["row_count"],
+                per_patient=per_patient,
+                sha256=digest.hexdigest(),
+                complete=state["complete"],
+            )
+            _disclosure.send_after_commit(app_obj, export_id)
+
+    def _rows(per_patient, state, _out):
         buf = io.StringIO()
         writer = csv.writer(buf)
         writer.writerow([
             "patient_guid", "org_guid", "canonical",
             "source_code", "effective_at", "value", "unit", "sim_run_id",
         ])
-        yield buf.getvalue()
+        yield _out(buf.getvalue())
         buf.seek(0); buf.truncate()
 
         row_count = 0
@@ -840,23 +873,21 @@ def cohort_export(cohort_id: str):
                     vq.get("value"), vq.get("unit"), sim_run_id,
                 ])
                 row_count += 1
+                state["row_count"] = row_count
+                pp = per_patient.setdefault(pat_guid, {"count": 0, "refs": []})
+                pp["count"] += 1
+                ref = _version_ref(r)
+                if ref:
+                    pp["refs"].append(ref)
                 if row_count % 100 == 0:
-                    yield buf.getvalue()
+                    yield _out(buf.getvalue())
                     buf.seek(0); buf.truncate()
         # Flush trailing rows.
         if buf.getvalue():
-            yield buf.getvalue()
+            yield _out(buf.getvalue())
 
-        # Audit row written at-end so row_count is final. We commit here
-        # (outside the streamed generator) — Flask iterates the generator
-        # before closing the response, so this runs before the connection
-        # is released.
-        _record_export_audit(
-            export_id=export_id,
-            cohort_id=cohort_id,
-            variables=variables,
-            row_count=row_count,
-        )
+        # The receipt (and its disclosures) is written by _stream's finally,
+        # after the last chunk, so row_count is final.
 
     headers = {
         "Content-Disposition": f'attachment; filename="cohort-{cohort_id[:8]}-{export_id[:8]}.csv"',
@@ -870,8 +901,22 @@ def cohort_export(cohort_id: str):
     return Response(_stream(), headers=headers)
 
 
+def _version_ref(r: dict) -> str | None:
+    """``Observation/<id>/_history/<v>`` when the CDR gave a version, else
+    ``Observation/<id>``; None when the row has no id."""
+    rid = r.get("id")
+    if not rid:
+        return None
+    vid = (r.get("meta") or {}).get("versionId")
+    rtype = r.get("resourceType") or "Observation"
+    return f"{rtype}/{rid}/_history/{vid}" if vid else f"{rtype}/{rid}"
+
+
 def _record_export_audit(*, export_id: str, cohort_id: str,
-                         variables: list[str], row_count: int) -> None:
+                         variables: list[str], row_count: int,
+                         per_patient: dict | None = None,
+                         sha256: str | None = None,
+                         complete: bool = True) -> None:
     """Write one ``AnalyseAudit`` row capturing the completed export.
 
     Ticket #214. Migrated from a process-local file log
@@ -882,6 +927,10 @@ def _record_export_audit(*, export_id: str, cohort_id: str,
     captures the route call with ``n_rows_returned = len(members)``
     (cohort denominator); this one captures the export receipt with
     the *actual* streamed row count and the export metadata.
+
+    #1058: in the SAME commit, one ``disclosure_outbox`` row per patient in
+    the file — so a receipt never exists without its disclosures, and a
+    disclosure never exists for an export that was rolled back.
     """
     blob = getattr(g, "access_blob", None) or {}
     if isinstance(blob, dict):
@@ -893,6 +942,7 @@ def _record_export_audit(*, export_id: str, cohort_id: str,
                 or getattr(blob, "email", None) or "anonymous")
         org_ids = list(getattr(blob, "organization_ids", None) or [])
         session_id = getattr(blob, "session_id", None)
+    at = datetime.now(timezone.utc)
     try:
         row = AnalyseAudit(
             user_guid=user,
@@ -906,10 +956,28 @@ def _record_export_audit(*, export_id: str, cohort_id: str,
                 "export_id": export_id,
                 "cohort_id": cohort_id,
                 "variables": list(variables),
-                "at": datetime.now(timezone.utc).isoformat(),
+                "at": at.isoformat(),
+                "n_patients": len(per_patient or {}),
+                "sha256": sha256,
+                "complete": bool(complete),
             },
         )
         db.session.add(row)
+        recipient = user if user != "anonymous" else None
+        for pat_guid, pp in sorted((per_patient or {}).items()):
+            event = _disclosure.build_audit_event(
+                export_id=export_id, patient_guid=pat_guid, recorded=at,
+                recipient_user=recipient,
+                description=(f"analyse.pdhc research CSV export {export_id} of "
+                             f"cohort {cohort_id}: {pp['count']} observation "
+                             f"row(s) for this patient, variables "
+                             f"{', '.join(variables)}"),
+                count=pp["count"], sha256=sha256,
+                references=pp.get("refs") or (),
+                extra_details={"complete": bool(complete)},
+            )
+            _disclosure.enqueue(db.session, export_id=export_id,
+                                patient_guid=pat_guid, event=event)
         db.session.commit()
     except Exception as exc:  # noqa: BLE001
         try:

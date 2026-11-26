@@ -19,6 +19,7 @@ from sqlalchemy.dialects.postgresql import UUID
 
 from app.extensions import db, JSONB
 from app.models.audit import AnalyseAudit
+from app.models.disclosure import DisclosureOutbox
 
 
 def _uuid():
@@ -64,4 +65,4 @@ class Cohort(db.Model):
     )
 
 
-__all__ = ["db", "JSONB", "User", "Cohort", "AnalyseAudit"]
+__all__ = ["db", "JSONB", "User", "Cohort", "AnalyseAudit", "DisclosureOutbox"]

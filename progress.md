@@ -2530,3 +2530,55 @@ Operator chose cdr1 as a federation source. cdr1 now holds 8 759 observations / 
 - Health 200 and file hashes verified in the container; sibling smoke green before (pre-rename smoke) and after.
 - No behaviour change until `EPS_*` is set in .env: operator script `/tmp/epsdep/eps_env.sh <group>` (refuses until https://eps.pdhc.se answers as eps.pdhc).
 - Deployed analyse was BEHIND git (`__init__.py` on all four, `node/reader.py` on the app, `routes/researcher.py` on node_cdr2/3, which also lack `analyse/measure_counts.py`). So only the #1022 diff was laid on the DEPLOYED files (patch applied cleanly, py_compile ok); the pending commits were NOT shipped. Converging analyse onto git is still open.
+
+## 2026-11-26 — #1058: research CSV exports report disclosures to record.pdhc (local, NOT deployed)
+
+Every patient in a research CSV export now gets one FHIR R5 AuditEvent
+(IHE BALP Privacy Disclosure, Source side) sent to
+`POST {RECORD_BASE_URL}/api/v1/disclosures`.
+
+What counts as a disclosure here (classified by what leaves analyse):
+
+| export / surface | per-patient identifiable? | disclosure? | why |
+|---|---|---|---|
+| `GET /api/cohort/<id>/export` (CSV) | yes — eps patient GUID + value + time per row | **YES** | a file the researcher keeps; receipt = `analyse_audit` route `research_export` |
+| `POST /analysis/export.csv` | no — k-suppressed aggregates | no | nothing in it names a patient |
+| histogram / boxplot / trend, `/api/v1/stats` | no — aggregates / counts | no | |
+| `POST /api/v1/node/run` | no — pseudonymised, disclosure-controlled partials | no | |
+| cohort preview, scatter | yes, but on screen inside the tool | no (logged as READ by `@audit_read`) | not handed over; operator may decide otherwise |
+| `/api/v1/observations`, `/canonical`, `/openehr` | yes, to `gateway.pdhc` only | no (here) | PDHC-internal; if gateway hands it on, that is gateway's disclosure |
+
+- `app/disclosure.py` — one `BALP` constant (profile canonical, category DCM
+  110106 Export, code iso-21089-lifecycle `disclose`, agent types 110153/110152,
+  object-role 1/4), purpose `HRESCH`, builder, sender, backfill, CLI.
+- Outbox `disclosure_outbox` (migration `0003_disclosure_outbox`), written in
+  the SAME commit as the `research_export` receipt; one row per patient with ≥1
+  row in the file; `source_event_id` = `<export_id>:<patient_guid>`
+  (identifier system `https://analyse.pdhc.se/disclosure`). Entities carry
+  version-specific `Observation/<id>/_history/<v>` references, a row count and
+  the sha256 of the streamed file. The receipt's payload_snapshot gained
+  `n_patients`, `sha256`, `complete`.
+- The receipt is now written in a `finally`: a client disconnect or a CDR
+  failure mid-stream still records what already left (`complete: false`).
+  Before, a broken stream left no receipt at all.
+- Send after commit in a daemon thread (`DISCLOSURE_SEND_MODE=thread`), never
+  raising; stops after the first transport error. 201/200 → sent with record's
+  id; else pending with a NAMED error (`http_403`, `transport_error: …`,
+  `record_not_configured: RECORD_BASE_URL unset`). No URL fallback.
+- `flask send-disclosures [--limit N] [--dry-run]` retries pending (exit 1 on a
+  failure). `--backfill` (dry run) / `--backfill --apply` builds rows from old
+  receipts: those never recorded which patients were in the file, so the
+  cohort's members are used (upper bound, marked `backfilled`, no per-patient
+  count); receipts with 0 rows and receipts whose cohort is gone are counted
+  and skipped.
+- Env (operator): `RECORD_BASE_URL=https://record.pdhc.se`,
+  `RECORD_DISCLOSURE_KEY` (= record's `RECORD_DISCLOSURE_KEY_ANALYSE`).
+- Tests: `tests/test_disclosure_1058.py` (18). Rollback and disconnect tests
+  mutation-checked (fail when the outbox commits separately / without the
+  `finally`); two controls show the never-blocks checks discriminate. Suite
+  706 → 724 passed.
+- Deploy: record.pdhc's endpoint must be live first; `flask db upgrade`; then
+  `send-disclosures --backfill` (read the counts) before `--apply`. Backfill
+  numbers not measured — no local data. Known gap left as-is: if the receipt
+  commit itself fails, the export is served without receipt or disclosure
+  (pre-existing; logged as a warning).

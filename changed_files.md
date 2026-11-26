@@ -363,3 +363,16 @@
 - .env.example, analyse_app/.env.example — EPS_*; IPS_* marked deprecated fallback
 - docs/technical.md, readme.md
 - analyse_app/tests/test_eps_env.py (new)
+
+## 2026-11-26 — #1058 disclosures to record.pdhc
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/disclosure.py (new)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/models/disclosure.py (new)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/models/__init__.py
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/routes/researcher.py
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/app/__init__.py
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/migrations/versions/0003_disclosure_outbox.py (new)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/tests/test_disclosure_1058.py (new)
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/.env.example
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/analyse_app/.env.example
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/progress.md
+- /Users/martiningvar/T7_sidewinder/analyse.pdhc/changed_files.md
